@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { deleteTransaction } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
@@ -107,6 +108,7 @@ function TransactionRow({
 }
 
 export function AccountRegister({ account, transactions, allAccounts, allCategories }: Props) {
+  const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [txns, setTxns] = useState(transactions)
   const [, startTransition] = useTransition()
@@ -115,6 +117,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     startTransition(async () => {
       await deleteTransaction(id)
       setTxns((prev) => prev.filter((t) => t.id !== id))
+      router.refresh()
     })
   }
 
@@ -169,7 +172,10 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           accounts={allAccounts}
           categories={allCategories}
           defaultAccountId={account.id}
-          onClose={() => setShowModal(false)}
+          onClose={() => {
+            setShowModal(false)
+            router.refresh()
+          }}
         />
       )}
     </div>
