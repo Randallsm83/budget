@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
-import { addTransaction } from '@/lib/actions'
+import { addTransaction, updateTransaction } from '@/lib/actions'
 
 interface CategoryOption {
   id: string
@@ -14,23 +14,40 @@ interface AccountOption {
   name: string
 }
 
+interface InitialValues {
+  id: string
+  accountId: string
+  categoryId: string | null
+  date: string
+  payee: string
+  amount: number // milliunits — negative = outflow
+  memo: string
+}
+
 interface Props {
   accounts: AccountOption[]
   categories: CategoryOption[]
   defaultAccountId?: string
+  initialValues?: InitialValues
   onClose: () => void
 }
 
-export function AddTransactionModal({ accounts, categories, defaultAccountId, onClose }: Props) {
+export function AddTransactionModal({ accounts, categories, defaultAccountId, initialValues, onClose }: Props) {
   const today = new Date().toISOString().substring(0, 10)
+  const isEditing = !!initialValues
 
-  const [accountId, setAccountId] = useState(defaultAccountId ?? accounts[0]?.id ?? '')
-  const [categoryId, setCategoryId] = useState('')
-  const [date, setDate] = useState(today)
-  const [payee, setPayee] = useState('')
-  const [amount, setAmount] = useState('')
-  const [isOutflow, setIsOutflow] = useState(true)
-  const [memo, setMemo] = useState('')
+  const initOutflow = initialValues ? initialValues.amount < 0 : true
+  const initAmount = initialValues
+    ? (Math.abs(initialValues.amount) / 1000).toFixed(2)
+    : ''
+
+  const [accountId, setAccountId] = useState(initialValues?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '')
+  const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? '')
+  const [date, setDate] = useState(initialValues?.date ?? today)
+  const [payee, setPayee] = useState(initialValues?.payee ?? '')
+  const [amount, setAmount] = useState(initAmount)
+  const [isOutflow, setIsOutflow] = useState(initOutflow)
+  const [memo, setMemo] = useState(initialValues?.memo ?? '')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
 
@@ -43,18 +60,30 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, on
 
     startTransition(async () => {
       try {
-        await addTransaction({
-          accountId,
-          categoryId: categoryId || null,
-          date,
-          payee,
-          amountDollars: amount,
-          isOutflow,
-          memo,
-        })
+        if (isEditing && initialValues) {
+          await updateTransaction(initialValues.id, {
+            accountId,
+            categoryId: categoryId || null,
+            date,
+            payee,
+            amountDollars: amount,
+            isOutflow,
+            memo,
+          })
+        } else {
+          await addTransaction({
+            accountId,
+            categoryId: categoryId || null,
+            date,
+            payee,
+            amountDollars: amount,
+            isOutflow,
+            memo,
+          })
+        }
         onClose()
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Failed to add transaction.')
+        setError(err instanceof Error ? err.message : 'Failed to save transaction.')
       }
     })
   }
@@ -65,7 +94,9 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, on
       onClick={(e) => e.target === e.currentTarget && onClose()}
     >
       <div className="bg-[#1f2039] border border-[#3a3b58] rounded-xl w-full max-w-md mx-4 p-6 shadow-2xl">
-        <h2 className="text-lg font-semibold text-[#ecf0f1] mb-5">Add Transaction</h2>
+        <h2 className="text-lg font-semibold text-[#ecf0f1] mb-5">
+          {isEditing ? 'Edit Transaction' : 'Add Transaction'}
+        </h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           {/* Account */}
@@ -213,7 +244,7 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, on
               className="flex-1 bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold py-2 rounded-lg text-sm
                          transition-colors disabled:opacity-60"
             >
-              {isPending ? 'Saving…' : 'Add Transaction'}
+              {isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Transaction'}
             </button>
           </div>
         </form>

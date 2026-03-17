@@ -1,6 +1,7 @@
 'use client'
 
 import { useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import { addAccount } from '@/lib/actions'
 
 const ACCOUNT_TYPES = [
@@ -12,6 +13,7 @@ const ACCOUNT_TYPES = [
 ]
 
 export function AddAccountModal({ onClose }: { onClose: () => void }) {
+  const router = useRouter()
   const [name, setName] = useState('')
   const [type, setType] = useState('checking')
   const [balance, setBalance] = useState('0.00')
@@ -25,6 +27,7 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
     startTransition(async () => {
       try {
         await addAccount({ name: name.trim(), type, startingBalanceDollars: balance })
+        router.refresh()
         onClose()
       } catch (err) {
         setError(err instanceof Error ? err.message : 'Failed to create account.')

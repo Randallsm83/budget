@@ -106,6 +106,88 @@ export async function addTransaction(data: {
   return txn
 }
 
+export async function updateTransaction(id: string, data: {
+  accountId: string
+  categoryId?: string | null
+  date: string
+  payee: string
+  amountDollars: string
+  memo?: string
+  isOutflow: boolean
+}) {
+  const userId = await requireUser()
+
+  const txn = await db.query.transactions.findFirst({
+    where: and(eq(transactions.id, id), eq(transactions.userId, userId)),
+  })
+  if (!txn) throw new Error('Transaction not found')
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, txn.accountId), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  const rawDollars = parseFloat(data.amountDollars.replace(/[$,]/g, '')) || 0
+  const newAmount = data.isOutflow
+    ? -Math.abs(Math.round(rawDollars * 1000))
+    : Math.abs(Math.round(rawDollars * 1000))
+
+  const balanceDelta = newAmount - txn.amount
+
+  await db
+    .update(transactions)
+    .set({
+      categoryId: data.categoryId ?? null,
+      date: data.date,
+      payee: data.payee || null,
+      amount: newAmount,
+      memo: data.memo || null,
+      updatedAt: new Date(),
+    })
+    .where(eq(transactions.id, id))
+
+  await db
+    .update(accounts)
+    .set({
+      balance: account.balance + balanceDelta,
+      ...(txn.cleared ? { clearedBalance: account.clearedBalance + balanceDelta } : {}),
+    })
+    .where(eq(accounts.id, account.id))
+
+  const oldMonth = txn.date.substring(0, 7)
+  const newMonth = data.date.substring(0, 7)
+  revalidatePath(`/budget/${oldMonth}`)
+  if (newMonth !== oldMonth) revalidatePath(`/budget/${newMonth}`)
+  revalidatePath('/accounts')
+  revalidatePath(`/accounts/${txn.accountId}`)
+}
+
+export async function toggleCleared(id: string) {
+  const userId = await requireUser()
+
+  const txn = await db.query.transactions.findFirst({
+    where: and(eq(transactions.id, id), eq(transactions.userId, userId)),
+  })
+  if (!txn) throw new Error('Transaction not found')
+
+  const nowCleared = !txn.cleared
+
+  await db
+    .update(transactions)
+    .set({ cleared: nowCleared })
+    .where(eq(transactions.id, id))
+
+  // Update clearedBalance: add amount if newly cleared, subtract if uncleared
+  const delta = nowCleared ? txn.amount : -txn.amount
+  await db
+    .update(accounts)
+    .set({ clearedBalance: sql`cleared_balance + ${delta}` })
+    .where(and(eq(accounts.id, txn.accountId), eq(accounts.userId, userId)))
+
+  revalidatePath(`/accounts/${txn.accountId}`)
+  revalidatePath('/accounts')
+}
+
 export async function deleteTransaction(id: string) {
   const userId = await requireUser()
 
@@ -114,18 +196,19 @@ export async function deleteTransaction(id: string) {
   })
   if (!txn) throw new Error('Transaction not found')
 
-  // Fetch account balance before deleting
   const account = await db.query.accounts.findFirst({
     where: eq(accounts.id, txn.accountId),
   })
 
   await db.delete(transactions).where(eq(transactions.id, id))
 
-  // Reverse the amount from the account balance
   if (account) {
     await db
       .update(accounts)
-      .set({ balance: account.balance - txn.amount })
+      .set({
+        balance: account.balance - txn.amount,
+        ...(txn.cleared ? { clearedBalance: account.clearedBalance - txn.amount } : {}),
+      })
       .where(eq(accounts.id, txn.accountId))
   }
 
@@ -133,6 +216,53 @@ export async function deleteTransaction(id: string) {
   revalidatePath(`/budget/${month}`)
   revalidatePath('/accounts')
   revalidatePath(`/accounts/${txn.accountId}`)
+}
+
+export async function updateAccount(id: string, data: { name: string; type: string }) {
+  const userId = await requireUser()
+  if (!data.name.trim()) throw new Error('Name is required')
+
+  await db
+    .update(accounts)
+    .set({ name: data.name.trim(), type: data.type })
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+
+  revalidatePath('/accounts')
+  revalidatePath(`/accounts/${id}`)
+}
+
+export async function closeAccount(id: string) {
+  const userId = await requireUser()
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, id), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  await db
+    .update(accounts)
+    .set({ closed: !account.closed })
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+
+  revalidatePath('/accounts')
+  revalidatePath(`/accounts/${id}`)
+}
+
+export async function deleteAccount(id: string) {
+  const userId = await requireUser()
+
+  const [row] = await db
+    .select({ val: count(transactions.id) })
+    .from(transactions)
+    .where(and(eq(transactions.accountId, id), eq(transactions.userId, userId)))
+
+  if ((row?.val ?? 0) > 0) throw new Error('Account has transactions — delete them first')
+
+  await db
+    .delete(accounts)
+    .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+
+  revalidatePath('/accounts')
 }
 
 // ---------------------------------------------------------------------------

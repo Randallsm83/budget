@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useTransition } from 'react'
+import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { AddAccountModal } from '@/components/AddAccountModal'
+import { closeAccount, deleteAccount } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Account {
@@ -22,9 +24,34 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 export default function AccountsPage() {
+  const router = useRouter()
   const [accounts, setAccounts] = useState<Account[]>([])
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
+  const [, startTransition] = useTransition()
+  const [errors, setErrors] = useState<Record<string, string>>({})
+
+  function handleClose(id: string) {
+    startTransition(async () => {
+      await closeAccount(id)
+      router.refresh()
+      loadAccounts()
+    })
+  }
+
+  function handleDelete(id: string) {
+    startTransition(async () => {
+      try {
+        await deleteAccount(id)
+        router.refresh()
+        loadAccounts()
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : 'Cannot delete'
+        setErrors((prev) => ({ ...prev, [id]: msg }))
+        setTimeout(() => setErrors((prev) => ({ ...prev, [id]: '' })), 3000)
+      }
+    })
+  }
 
   async function loadAccounts() {
     const res = await fetch('/api/accounts')
@@ -81,24 +108,46 @@ export default function AccountsPage() {
         {!loading && accounts.length > 0 && (
           <div className="space-y-2 max-w-2xl">
             {active.map((account) => (
-              <Link
+              <div
                 key={account.id}
-                href={`/accounts/${account.id}`}
                 className="flex items-center justify-between bg-[#1f2039] border border-[#3a3b58] rounded-lg px-4 py-3
-                           hover:border-[#b3a1e6] hover:bg-[#252640] transition-all"
+                           hover:border-[#b3a1e6] hover:bg-[#252640] transition-all group"
               >
-                <div>
+                <Link href={`/accounts/${account.id}`} className="flex-1 min-w-0">
                   <p className="text-sm font-medium text-[#ecf0f1]">{account.name}</p>
-                  <p className="text-xs text-[#8a8fad] mt-0.5">{TYPE_LABELS[account.type] ?? account.type}</p>
-                </div>
-                <p
-                  className={`text-sm font-semibold tabular-nums ${
+                  <p className="text-xs text-[#8a8fad] mt-0.5">
+                    {TYPE_LABELS[account.type] ?? account.type}
+                    {errors[account.id] && (
+                      <span className="ml-2 text-[#ce6f8f]">{errors[account.id]}</span>
+                    )}
+                  </p>
+                </Link>
+                <div className="flex items-center gap-3">
+                  <p className={`text-sm font-semibold tabular-nums ${
                     account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'
-                  }`}
-                >
-                  {formatMoney(account.balance)}
-                </p>
-              </Link>
+                  }`}>
+                    {formatMoney(account.balance)}
+                  </p>
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleClose(account.id)}
+                      title="Close account"
+                      className="text-xs text-[#8a8fad] hover:text-[#f2ce00] px-1.5 py-0.5 rounded
+                                 hover:bg-[#f2ce00]/10 transition-colors"
+                    >
+                      Close
+                    </button>
+                    <button
+                      onClick={() => handleDelete(account.id)}
+                      title="Delete account"
+                      className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1.5 py-0.5 rounded
+                                 hover:bg-[#ce6f8f]/10 transition-colors"
+                    >
+                      Delete
+                    </button>
+                  </div>
+                </div>
+              </div>
             ))}
           </div>
         )}

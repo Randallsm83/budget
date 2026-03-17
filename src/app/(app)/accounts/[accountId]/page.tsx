@@ -59,15 +59,17 @@ export default async function AccountRegisterPage({ params }: Props) {
 
   return (
     <AccountRegister
-      account={{ id: account.id, name: account.name, type: account.type, balance: account.balance }}
+      account={{ id: account.id, name: account.name, type: account.type, balance: account.balance, clearedBalance: account.clearedBalance }}
       transactions={txns.map((t) => ({
         id: t.id,
+        accountId: account.id,
         date: t.date,
         payee: t.payee ?? '',
         amount: t.amount,
         cleared: t.cleared,
         reconciled: t.reconciled,
         memo: t.memo ?? '',
+        categoryId: t.categoryId ?? null,
         categoryName: t.categoryName
           ? `${t.categoryGroupName}: ${t.categoryName}`
           : null,

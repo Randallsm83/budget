@@ -3,17 +3,19 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
-import { deleteTransaction } from '@/lib/actions'
+import { deleteTransaction, toggleCleared } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
   id: string
+  accountId: string
   date: string
   payee: string
   amount: number
   cleared: boolean
   reconciled: boolean
   memo: string
+  categoryId: string | null
   categoryName: string | null
 }
 
@@ -22,6 +24,7 @@ interface Account {
   name: string
   type: string
   balance: number
+  clearedBalance: number
 }
 
 interface Props {
@@ -41,20 +44,45 @@ const TYPE_LABELS: Record<string, string> = {
 
 function TransactionRow({
   txn,
+  allAccounts,
+  allCategories,
   onDelete,
+  onEdit,
 }: {
   txn: Transaction
+  allAccounts: { id: string; name: string }[]
+  allCategories: { id: string; name: string; groupName: string }[]
   onDelete: (id: string) => void
+  onEdit: () => void
 }) {
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
 
+  function handleToggleCleared() {
+    startTransition(() => toggleCleared(txn.id))
+  }
+
   return (
     <div
-      className={`grid grid-cols-[7rem_1fr_1fr_7rem_4rem] gap-2 px-4 py-2.5 border-b border-[#1f2039]
+      className={`grid grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem] gap-2 px-4 py-2.5 border-b border-[#1f2039]
                   hover:bg-[#1f2039] transition-colors items-center group
                   ${isPending ? 'opacity-50' : ''}`}
     >
+      {/* Cleared indicator */}
+      <button
+        onClick={handleToggleCleared}
+        title={txn.cleared ? 'Cleared — click to unclear' : 'Uncleared — click to clear'}
+        className="flex items-center justify-center"
+      >
+        <span
+          className={`w-2.5 h-2.5 rounded-full border transition-colors ${
+            txn.cleared
+              ? 'bg-[#5ccc96] border-[#5ccc96]'
+              : 'bg-transparent border-[#8a8fad] hover:border-[#5ccc96]'
+          }`}
+        />
+      </button>
+
       <span className="text-xs text-[#8a8fad] tabular-nums">{txn.date}</span>
 
       <div className="min-w-0">
@@ -74,8 +102,15 @@ function TransactionRow({
         {formatMoney(txn.amount)}
       </span>
 
-      {/* Delete */}
-      <div className="flex justify-end">
+      {/* Edit + Delete */}
+      <div className="flex justify-end items-center gap-1">
+        <button
+          onClick={onEdit}
+          className="text-xs text-[#3a3b58] hover:text-[#b3a1e6] opacity-0 group-hover:opacity-100 transition-all px-1"
+          title="Edit"
+        >
+          ✎
+        </button>
         {confirming ? (
           <div className="flex gap-1">
             <button
@@ -98,6 +133,7 @@ function TransactionRow({
           <button
             onClick={() => setConfirming(true)}
             className="text-xs text-[#3a3b58] hover:text-[#ce6f8f] opacity-0 group-hover:opacity-100 transition-all"
+            title="Delete"
           >
             ✕
           </button>
@@ -110,6 +146,7 @@ function TransactionRow({
 export function AccountRegister({ account, transactions, allAccounts, allCategories }: Props) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  const [editingTxn, setEditingTxn] = useState<Transaction | null>(null)
   const [txns, setTxns] = useState(transactions)
   const [, startTransition] = useTransition()
 
@@ -128,11 +165,14 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         <div>
           <h2 className="text-base font-semibold text-[#ecf0f1]">{account.name}</h2>
           <p className="text-xs text-[#8a8fad] mt-0.5">
-            {TYPE_LABELS[account.type] ?? account.type} ·{' '}
-            <span
-              className={account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}
-            >
+            {TYPE_LABELS[account.type] ?? account.type}
+            {' · Balance: '}
+            <span className={account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
               {formatMoney(account.balance)}
+            </span>
+            {' · Cleared: '}
+            <span className={account.clearedBalance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
+              {formatMoney(account.clearedBalance)}
             </span>
           </p>
         </div>
@@ -145,9 +185,10 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
       </div>
 
       {/* Column headers */}
-      <div className="flex-shrink-0 grid grid-cols-[7rem_1fr_1fr_7rem_4rem] gap-2 px-4 py-2
+      <div className="flex-shrink-0 grid grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem] gap-2 px-4 py-2
                       bg-[#1a1b2e] border-b border-[#3a3b58]
                       text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">
+        <span title="Cleared" className="text-center">○</span>
         <span>Date</span>
         <span>Payee / Memo</span>
         <span>Category</span>
@@ -163,7 +204,14 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           </div>
         )}
         {txns.map((txn) => (
-          <TransactionRow key={txn.id} txn={txn} onDelete={handleDelete} />
+          <TransactionRow
+            key={txn.id}
+            txn={txn}
+            allAccounts={allAccounts}
+            allCategories={allCategories}
+            onDelete={handleDelete}
+            onEdit={() => setEditingTxn(txn)}
+          />
         ))}
       </div>
 
@@ -174,6 +222,26 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           defaultAccountId={account.id}
           onClose={() => {
             setShowModal(false)
+            router.refresh()
+          }}
+        />
+      )}
+
+      {editingTxn && (
+        <AddTransactionModal
+          accounts={allAccounts}
+          categories={allCategories}
+          initialValues={{
+            id: editingTxn.id,
+            accountId: editingTxn.accountId,
+            categoryId: editingTxn.categoryId,
+            date: editingTxn.date,
+            payee: editingTxn.payee,
+            amount: editingTxn.amount,
+            memo: editingTxn.memo,
+          }}
+          onClose={() => {
+            setEditingTxn(null)
             router.refresh()
           }}
         />
