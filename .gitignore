@@ -39,3 +39,7 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# un-ignore src/lib (blocked by global gitignore lib/ rule)
+!src/lib/
+!src/lib/**
