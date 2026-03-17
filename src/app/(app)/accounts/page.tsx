@@ -67,7 +67,9 @@ export default function AccountsPage() {
   }, [])
 
   const active = accounts.filter((a) => !a.closed)
+  const closed = accounts.filter((a) => a.closed)
   const netWorth = active.reduce((sum, a) => sum + a.balance, 0)
+  const [showClosed, setShowClosed] = useState(false)
 
   return (
     <div className="flex flex-col h-full">
@@ -149,6 +151,64 @@ export default function AccountsPage() {
                 </div>
               </div>
             ))}
+
+            {closed.length > 0 && (
+              <div className="pt-2">
+                <button
+                  onClick={() => setShowClosed((v) => !v)}
+                  className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] transition-colors"
+                >
+                  {showClosed ? '▾' : '▸'} {closed.length} closed account{closed.length !== 1 ? 's' : ''}
+                </button>
+
+                {showClosed && (
+                  <div className="mt-2 space-y-2">
+                    {closed.map((account) => (
+                      <div
+                        key={account.id}
+                        className="flex items-center justify-between bg-[#1a1b2e] border border-[#3a3b58] rounded-lg px-4 py-3
+                                   opacity-60 hover:opacity-80 transition-opacity group"
+                      >
+                        <Link href={`/accounts/${account.id}`} className="flex-1 min-w-0">
+                          <p className="text-sm font-medium text-[#ecf0f1]">{account.name}</p>
+                          <p className="text-xs text-[#8a8fad] mt-0.5">
+                            {TYPE_LABELS[account.type] ?? account.type} · Closed
+                            {errors[account.id] && (
+                              <span className="ml-2 text-[#ce6f8f]">{errors[account.id]}</span>
+                            )}
+                          </p>
+                        </Link>
+                        <div className="flex items-center gap-3">
+                          <p className={`text-sm font-semibold tabular-nums ${
+                            account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#8a8fad]'
+                          }`}>
+                            {formatMoney(account.balance)}
+                          </p>
+                          <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={() => handleClose(account.id)}
+                              title="Re-open account"
+                              className="text-xs text-[#8a8fad] hover:text-[#5ccc96] px-1.5 py-0.5 rounded
+                                         hover:bg-[#5ccc96]/10 transition-colors"
+                            >
+                              Reopen
+                            </button>
+                            <button
+                              onClick={() => handleDelete(account.id)}
+                              title="Delete account"
+                              className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1.5 py-0.5 rounded
+                                         hover:bg-[#ce6f8f]/10 transition-colors"
+                            >
+                              Delete
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

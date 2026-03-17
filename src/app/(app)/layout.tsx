@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
-import { eq, asc } from 'drizzle-orm'
+import { eq, asc, and } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts } from '@/db/schema'
 import { NavLink } from '@/components/NavLink'
@@ -22,7 +22,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const userAccounts = await db
     .select({ id: accounts.id, name: accounts.name, type: accounts.type, balance: accounts.balance })
     .from(accounts)
-    .where(eq(accounts.userId, session.user.id))
+    .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
     .orderBy(asc(accounts.createdAt))
 
   const netWorth = userAccounts.reduce((sum, a) => sum + a.balance, 0)

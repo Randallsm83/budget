@@ -3,7 +3,8 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
-import { deleteTransaction, toggleCleared } from '@/lib/actions'
+import { CsvImportModal } from './CsvImportModal'
+import { deleteTransaction, toggleCleared, updateAccount } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
@@ -146,9 +147,21 @@ function TransactionRow({
 export function AccountRegister({ account, transactions, allAccounts, allCategories }: Props) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
+  const [showImport, setShowImport] = useState(false)
   const [editingTxn, setEditingTxn] = useState<Transaction | null>(null)
   const [txns, setTxns] = useState(transactions)
+  const [renamingAccount, setRenamingAccount] = useState(false)
+  const [accountName, setAccountName] = useState(account.name)
   const [, startTransition] = useTransition()
+
+  function commitRename(name: string) {
+    setRenamingAccount(false)
+    if (name.trim() && name.trim() !== account.name) {
+      setAccountName(name.trim())
+      startTransition(() => updateAccount(account.id, { name: name.trim(), type: account.type }))
+      router.refresh()
+    }
+  }
 
   async function handleDelete(id: string) {
     startTransition(async () => {
@@ -163,7 +176,27 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
       {/* Header */}
       <div className="flex-shrink-0 bg-[#1f2039] border-b border-[#3a3b58] px-6 py-3 flex items-center justify-between">
         <div>
-          <h2 className="text-base font-semibold text-[#ecf0f1]">{account.name}</h2>
+          {renamingAccount ? (
+            <input
+              autoFocus
+              defaultValue={accountName}
+              onBlur={(e) => commitRename(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') commitRename(e.currentTarget.value)
+                if (e.key === 'Escape') setRenamingAccount(false)
+              }}
+              className="text-base font-semibold bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1]
+                         rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6]"
+            />
+          ) : (
+            <h2
+              className="text-base font-semibold text-[#ecf0f1] cursor-default"
+              onDoubleClick={() => setRenamingAccount(true)}
+              title="Double-click to rename"
+            >
+              {accountName}
+            </h2>
+          )}
           <p className="text-xs text-[#8a8fad] mt-0.5">
             {TYPE_LABELS[account.type] ?? account.type}
             {' · Balance: '}
@@ -176,12 +209,21 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             </span>
           </p>
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
-        >
-          + Add Transaction
-        </button>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setShowImport(true)}
+            className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
+                       font-medium px-3 py-1.5 rounded-lg text-sm transition-colors"
+          >
+            Import CSV
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
+          >
+            + Add Transaction
+          </button>
+        </div>
       </div>
 
       {/* Column headers */}
@@ -242,6 +284,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           }}
           onClose={() => {
             setEditingTxn(null)
+            router.refresh()
+          }}
+        />
+      )}
+
+      {showImport && (
+        <CsvImportModal
+          accountId={account.id}
+          categories={allCategories}
+          onClose={() => {
+            setShowImport(false)
             router.refresh()
           }}
         />

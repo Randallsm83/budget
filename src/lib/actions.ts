@@ -383,6 +383,71 @@ export async function deleteCategory(id: string) {
 }
 
 // ---------------------------------------------------------------------------
+// CSV Import
+// ---------------------------------------------------------------------------
+export interface CsvRow {
+  date: string        // 'YYYY-MM-DD'
+  payee: string
+  amount: number      // milliunits, negative = outflow
+  memo?: string
+  importId: string    // dedup key
+}
+
+export async function importTransactions(
+  accountId: string,
+  rows: CsvRow[],
+): Promise<{ imported: number; skipped: number }> {
+  const userId = await requireUser()
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, accountId), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  let imported = 0
+  let skipped = 0
+  let balanceDelta = 0
+
+  for (const row of rows) {
+    const result = await db
+      .insert(transactions)
+      .values({
+        userId,
+        accountId,
+        date: row.date,
+        payee: row.payee || null,
+        amount: row.amount,
+        memo: row.memo || null,
+        importId: row.importId,
+        cleared: true,
+      })
+      .onConflictDoNothing({ target: transactions.importId })
+      .returning({ id: transactions.id })
+
+    if (result.length > 0) {
+      imported++
+      balanceDelta += row.amount
+    } else {
+      skipped++
+    }
+  }
+
+  if (balanceDelta !== 0) {
+    await db
+      .update(accounts)
+      .set({
+        balance: account.balance + balanceDelta,
+        clearedBalance: account.clearedBalance + balanceDelta,
+      })
+      .where(eq(accounts.id, accountId))
+  }
+
+  revalidatePath('/accounts')
+  revalidatePath(`/accounts/${accountId}`)
+  return { imported, skipped }
+}
+
+// ---------------------------------------------------------------------------
 // Budget assignments
 // ---------------------------------------------------------------------------
 export async function setBudgeted(categoryId: string, month: string, amountMilliunits: number) {

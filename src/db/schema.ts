@@ -108,7 +108,7 @@ export const transactions = pgTable('transactions', {
   memo: text('memo'),
   cleared: boolean('cleared').notNull().default(false),
   reconciled: boolean('reconciled').notNull().default(false),
-  importId: text('import_id'), // dedup key for Plaid / CSV import
+  importId: text('import_id').unique(), // dedup key for Plaid / CSV import
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
