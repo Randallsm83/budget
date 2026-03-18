@@ -68,6 +68,18 @@ function PlaidConnectSection({ onDone, onError }: { onDone: () => void; onError:
   )
 }
 
+const BALANCE_META: Record<string, { label: string; hint: string }> = {
+  checking:    { label: 'Current Balance', hint: 'Enter the current account balance.' },
+  savings:     { label: 'Current Balance', hint: 'Enter the current account balance.' },
+  cash:        { label: 'Cash on Hand',    hint: 'How much cash do you currently have?' },
+  credit_card: { label: 'Current Balance', hint: 'Enter as negative if you owe money (e.g. -1500.00).' },
+  loan:        { label: 'Outstanding Balance', hint: 'Enter the remaining amount owed as negative (e.g. -250000.00).' },
+  investment:  { label: 'Current Value',   hint: 'Estimated market value of this account.' },
+  real_estate: { label: 'Estimated Value', hint: 'Current market value of the property.' },
+  vehicle:     { label: 'Estimated Value', hint: 'Current market value of the vehicle.' },
+  other:       { label: 'Current Value',   hint: '' },
+}
+
 export function AddAccountModal({ onClose }: { onClose: () => void }) {
   const router = useRouter()
   const [mode, setMode] = useState<'manual' | 'plaid'>('manual')
@@ -175,7 +187,7 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
 
           <div>
             <label className="block text-xs font-medium text-[#8a8fad] mb-1.5 uppercase tracking-wide">
-              Current Balance ($)
+              {BALANCE_META[type]?.label ?? 'Current Balance'} ($)
             </label>
             <input
               type="text"
@@ -187,9 +199,9 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
                          focus:outline-none focus:border-[#b3a1e6] focus:ring-1 focus:ring-[#b3a1e6] transition-colors
                          tabular-nums text-right"
             />
-            <p className="text-xs text-[#8a8fad] mt-1">
-              Negative for credit card debt (e.g. -1500.00)
-            </p>
+            {BALANCE_META[type]?.hint && (
+              <p className="text-xs text-[#8a8fad] mt-1">{BALANCE_META[type].hint}</p>
+            )}
           </div>
 
           <div className="flex gap-3 pt-1">
