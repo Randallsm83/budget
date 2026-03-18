@@ -18,6 +18,8 @@ export const users = pgTable('users', {
   name: text('name').notNull(),
   email: text('email').unique().notNull(),
   passwordHash: text('password_hash').notNull(),
+  mfaSecret: text('mfa_secret'),
+  mfaEnabled: boolean('mfa_enabled').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 

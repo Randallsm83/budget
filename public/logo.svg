@@ -1,0 +1,27 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" fill="none">
+  <defs>
+    <linearGradient id="pg" x1="7" y1="12" x2="41" y2="36" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#b3a1e6"/>
+      <stop offset="100%" stop-color="#c678dd"/>
+    </linearGradient>
+    <linearGradient id="gg" x1="12" y1="0" x2="35" y2="0" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#5ccc96"/>
+      <stop offset="100%" stop-color="#00a3cc"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="48" height="48" rx="11" fill="#1f2039"/>
+
+  <!-- Envelope body -->
+  <rect x="7" y="12" width="34" height="24" rx="3" fill="#242540" stroke="url(#pg)" stroke-width="1.5"/>
+
+  <!-- Envelope V flap (sealed) -->
+  <path d="M7 15 L24 24 L41 15" stroke="url(#pg)" stroke-width="1.5" stroke-linejoin="round" stroke-linecap="round"/>
+
+  <!-- Rising trend line (lower envelope body) -->
+  <path d="M12 34 L17 30 L22 32 L28 28 L35 30" stroke="url(#gg)" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Trend endpoint dot -->
+  <circle cx="35" cy="30" r="2.5" fill="#5ccc96"/>
+</svg>

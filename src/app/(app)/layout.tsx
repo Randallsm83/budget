@@ -33,7 +33,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
       <nav className="w-56 flex-shrink-0 bg-[#1f2039] flex flex-col border-r border-[#3a3b58]">
         {/* Branding */}
         <div className="px-4 py-4 border-b border-[#3a3b58]">
-          <h1 className="text-lg font-bold text-[#b3a1e6] tracking-tight">💰 Budget</h1>
+          <div className="flex items-center gap-2">
+            <img src="/logo.svg" alt="" aria-hidden="true" className="w-7 h-7 flex-shrink-0" />
+            <h1 className="text-lg font-bold text-[#b3a1e6] tracking-tight">Budget</h1>
+          </div>
           <p className="text-xs text-[#8a8fad] mt-0.5 truncate">{session.user?.name}</p>
         </div>
 
@@ -85,7 +88,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Sign out */}
-        <div className="p-2 border-t border-[#3a3b58]">
+        <div className="p-2 border-t border-[#3a3b58] space-y-0.5">
+          <NavLink href="/settings/security">
+            <span>🔒</span>
+            <span className="text-xs">Security</span>
+          </NavLink>
           <SignOutButton />
         </div>
       </nav>
