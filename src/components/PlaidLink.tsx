@@ -15,9 +15,15 @@ export function PlaidLink({ accountId, onConnected }: Props) {
 
   useEffect(() => {
     fetch('/api/plaid/link-token', { method: 'POST' })
-      .then((r) => r.json())
-      .then((d) => setLinkToken(d.link_token))
-      .catch(() => setError('Failed to initialize Plaid'))
+      .then(async (r) => {
+        const d = await r.json()
+        if (!r.ok || !d.link_token) {
+          setError(d.error ?? 'Failed to get link token')
+        } else {
+          setLinkToken(d.link_token)
+        }
+      })
+      .catch((e) => setError(String(e)))
   }, [])
 
   const onSuccess = useCallback(
