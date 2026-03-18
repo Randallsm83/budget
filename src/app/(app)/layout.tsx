@@ -3,6 +3,7 @@ import { redirect } from 'next/navigation'
 import { eq, asc, and } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts } from '@/db/schema'
+import Link from 'next/link'
 import { NavLink } from '@/components/NavLink'
 import { SignOutButton } from '@/components/SignOutButton'
 import { formatMoney } from '@/lib/budget'
@@ -25,7 +26,11 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
     .orderBy(asc(accounts.createdAt))
 
-  const netWorth = userAccounts.reduce((sum, a) => sum + a.balance, 0)
+  const assets = userAccounts.filter((a) => a.type !== 'credit_card')
+  const liabilities = userAccounts.filter((a) => a.type === 'credit_card')
+  const assetTotal = assets.reduce((s, a) => s + a.balance, 0)
+  const liabilityTotal = liabilities.reduce((s, a) => s + a.balance, 0)
+  const netWorth = assetTotal + liabilityTotal
 
   return (
     <div className="flex h-screen bg-[#1a1b2e] text-[#ecf0f1] overflow-hidden">
@@ -47,34 +52,50 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Budget
           </NavLink>
 
-          {/* Accounts section */}
-          <div className="pt-3 pb-1 px-3">
+          {/* Accounts header */}
+          <div className="pt-3 pb-1 px-3 flex items-center justify-between">
             <p className="text-[10px] font-bold text-[#8a8fad] uppercase tracking-widest">Accounts</p>
+            <Link href="/accounts" className="text-[#8a8fad] hover:text-[#ecf0f1] transition-colors text-sm leading-none" title="Manage accounts">
+              ＋
+            </Link>
           </div>
 
-          <NavLink href="/accounts" exact>
-            <span>＋</span>
-            <span className="text-xs">All Accounts</span>
-          </NavLink>
+          {/* Assets */}
+          {assets.length > 0 && (
+            <>
+              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
+                <span className="text-[9px] font-semibold text-[#5ccc96] uppercase tracking-widest">Assets</span>
+                <span className="text-[9px] text-[#5ccc96] tabular-nums">{formatMoney(assetTotal)}</span>
+              </div>
+              {assets.map((account) => (
+                <NavLink key={account.id} href={`/accounts/${account.id}`}>
+                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="flex-1 truncate text-xs">{account.name}</span>
+                  <span className="text-xs tabular-nums flex-shrink-0 text-[#5ccc96]">{formatMoney(account.balance)}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
 
-          {userAccounts.map((account) => (
-            <NavLink key={account.id} href={`/accounts/${account.id}`}>
-              <span className="text-base leading-none flex-shrink-0">
-                {TYPE_ICONS[account.type] ?? '📁'}
-              </span>
-              <span className="flex-1 truncate text-xs">{account.name}</span>
-              <span
-                className={`text-xs tabular-nums flex-shrink-0 ${
-                  account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'
-                }`}
-              >
-                {formatMoney(account.balance)}
-              </span>
-            </NavLink>
-          ))}
+          {/* Liabilities */}
+          {liabilities.length > 0 && (
+            <>
+              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
+                <span className="text-[9px] font-semibold text-[#ce6f8f] uppercase tracking-widest">Liabilities</span>
+                <span className="text-[9px] text-[#ce6f8f] tabular-nums">{formatMoney(liabilityTotal)}</span>
+              </div>
+              {liabilities.map((account) => (
+                <NavLink key={account.id} href={`/accounts/${account.id}`}>
+                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="flex-1 truncate text-xs">{account.name}</span>
+                  <span className="text-xs tabular-nums flex-shrink-0 text-[#ce6f8f]">{formatMoney(account.balance)}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
 
           {userAccounts.length > 0 && (
-            <div className="px-3 py-1.5 flex justify-between items-center">
+            <div className="mx-2 mt-2 px-3 py-1.5 flex justify-between items-center border-t border-[#3a3b58]">
               <span className="text-[10px] text-[#8a8fad] uppercase tracking-wide">Net Worth</span>
               <span
                 className={`text-xs font-semibold tabular-nums ${
@@ -88,11 +109,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         </div>
 
         {/* Sign out */}
-        <div className="p-2 border-t border-[#3a3b58] space-y-0.5">
-          <NavLink href="/settings/security">
-            <span>🔒</span>
-            <span className="text-xs">Security</span>
-          </NavLink>
+        <div className="p-2 border-t border-[#3a3b58]">
+          <div className="px-2 pb-1">
+            <a
+              href="/settings/security"
+              className="text-[10px] text-[#3a3b58] hover:text-[#8a8fad] transition-colors"
+            >
+              Security settings
+            </a>
+          </div>
           <SignOutButton />
         </div>
       </nav>

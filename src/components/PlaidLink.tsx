@@ -48,16 +48,14 @@ export function PlaidLink({ accountId, onConnected }: Props) {
   const { open, ready } = usePlaidLink({ token: linkToken ?? '', onSuccess })
 
   return (
-    <div className="flex flex-col items-end gap-1">
-      <button
-        onClick={() => open()}
-        disabled={!ready || exchanging || !!error}
-        className="border border-[#b3a1e6] text-[#b3a1e6] hover:bg-[#b3a1e6]/10 font-medium px-3 py-1.5
-                   rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-      >
-        {exchanging ? 'Connecting…' : '🏦 Connect Bank'}
-      </button>
-      {error && <p className="text-xs text-[#ce6f8f]">{error}</p>}
-    </div>
+    <button
+      onClick={() => open()}
+      disabled={!ready || exchanging}
+      title={error || undefined}
+      className="border border-[#b3a1e6] text-[#b3a1e6] hover:bg-[#b3a1e6]/10 font-medium px-3 py-1.5
+                 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+    >
+      {exchanging ? 'Connecting…' : error ? '⚠️ Connect Bank' : '🏦 Connect Bank'}
+    </button>
   )
 }
