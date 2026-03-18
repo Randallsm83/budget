@@ -462,6 +462,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
 
   return (
     <div className="flex-1 overflow-auto">
+      <div className="min-w-[30rem]">
       {/* Column headers */}
       <div className="sticky top-0 z-10 bg-[#1a1b2e] border-b border-[#3a3b58]
                       grid grid-cols-[1fr_7rem_7rem_7rem_2rem] px-6 py-2
@@ -516,6 +517,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
       )}
 
       <AddGroupRow />
+      </div>
     </div>
   )
 }

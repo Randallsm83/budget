@@ -5,6 +5,7 @@ import { db } from '@/db'
 import { accounts } from '@/db/schema'
 import { NavLink } from '@/components/NavLink'
 import { SignOutButton } from '@/components/SignOutButton'
+import { AppShell } from '@/components/AppShell'
 import { formatMoney } from '@/lib/budget'
 
 const TYPE_ICONS: Record<string, string> = {
@@ -43,10 +44,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const liabilityTotal = liabilities.reduce((s, a) => s + a.balance, 0)
   const netWorth = cashTotal + investmentTotal + propertyTotal + liabilityTotal
 
-  return (
-    <div className="flex h-screen bg-[#1a1b2e] text-[#ecf0f1] overflow-hidden">
-      {/* Sidebar */}
-      <nav className="w-56 flex-shrink-0 bg-[#1f2039] flex flex-col border-r border-[#3a3b58]">
+  const sidebarContent = (
+    <>
         {/* Branding */}
         <div className="px-4 py-4 border-b border-[#3a3b58]">
           <div className="flex items-center gap-2">
@@ -162,10 +161,12 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           </div>
           <SignOutButton />
         </div>
-      </nav>
+    </>
+  )
 
-      {/* Main content */}
-      <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
-    </div>
+  return (
+    <AppShell sidebarContent={sidebarContent}>
+      {children}
+    </AppShell>
   )
 }

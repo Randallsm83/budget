@@ -179,10 +179,10 @@ export default async function BudgetPage({ params }: Props) {
   return (
     <div className="flex flex-col h-full">
       {/* ── Month header bar ── */}
-      <div className="flex-shrink-0 bg-[#1f2039] border-b border-[#3a3b58] px-6 py-3
-                      flex items-center justify-between">
+      <div className="flex-shrink-0 bg-[#1f2039] border-b border-[#3a3b58] px-4 sm:px-6 py-3
+                      flex items-center justify-between gap-2">
         {/* Month navigator */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2">
           <Link
             href={`/budget/${prevMonth(month)}`}
             className="text-[#8a8fad] hover:text-[#ecf0f1] p-1.5 rounded hover:bg-[#2a2b45] transition-colors text-lg leading-none"
@@ -190,7 +190,7 @@ export default async function BudgetPage({ params }: Props) {
           >
             ‹
           </Link>
-          <h2 className="text-base font-semibold text-[#ecf0f1] min-w-[12rem] text-center">
+          <h2 className="text-sm sm:text-base font-semibold text-[#ecf0f1] min-w-[8rem] sm:min-w-[12rem] text-center">
             {formatMonthDisplay(month)}
           </h2>
           <Link
@@ -204,9 +204,9 @@ export default async function BudgetPage({ params }: Props) {
 
         {/* Ready to Assign */}
         <div className="text-right">
-          <p className="text-xs text-[#8a8fad] uppercase tracking-wide">Ready to Assign</p>
+          <p className="text-[10px] sm:text-xs text-[#8a8fad] uppercase tracking-wide">Ready to Assign</p>
           <p
-            className={`text-xl font-bold tabular-nums ${
+            className={`text-lg sm:text-xl font-bold tabular-nums ${
               rta < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'
             }`}
           >
