@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
-import { deleteTransaction, toggleCleared, updateAccount } from '@/lib/actions'
+import { deleteTransaction, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
@@ -54,15 +54,32 @@ function TransactionRow({
 }: {
   txn: Transaction
   allAccounts: { id: string; name: string }[]
-  allCategories: { id: string; name: string; groupName: string }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean }[]
   onDelete: (id: string) => void
   onEdit: () => void
 }) {
+  const router = useRouter()
   const [isPending, startTransition] = useTransition()
   const [confirming, setConfirming] = useState(false)
+  const [editingCat, setEditingCat] = useState(false)
+  const [localCatId, setLocalCatId] = useState(txn.categoryId)
+
+  const localCatName = localCatId
+    ? (allCategories.find((c) => c.id === localCatId)?.name ?? null)
+    : null
 
   function handleToggleCleared() {
     startTransition(() => toggleCleared(txn.id))
+  }
+
+  function handleCategoryChange(e: React.ChangeEvent<HTMLSelectElement>) {
+    const catId = e.target.value || null
+    setLocalCatId(catId)
+    setEditingCat(false)
+    startTransition(async () => {
+      await updateTransactionCategory(txn.id, catId)
+      router.refresh()
+    })
   }
 
   return (
@@ -93,8 +110,47 @@ function TransactionRow({
         {txn.memo && <p className="text-xs text-[#8a8fad] truncate">{txn.memo}</p>}
       </div>
 
-      <span className="text-xs text-[#8a8fad] truncate">
-        {txn.categoryName ?? <span className="text-[#f2ce00]">Inflow</span>}
+      <span className="text-xs truncate">
+        {editingCat ? (
+          <select
+            autoFocus
+            defaultValue={localCatId ?? ''}
+            onChange={handleCategoryChange}
+            onBlur={() => setEditingCat(false)}
+            className="bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] rounded px-1 py-0.5 text-xs
+                       focus:outline-none w-full max-w-[180px]"
+          >
+            <option value="">— Inflow / RTA —</option>
+            {allCategories.some((c) => c.isIncome) && (
+              <optgroup label="Income">
+                {allCategories.filter((c) => c.isIncome).map((c) => (
+                  <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {allCategories.some((c) => !c.isIncome) && (
+              <optgroup label="Expenses">
+                {allCategories.filter((c) => !c.isIncome).map((c) => (
+                  <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+        ) : (
+          <button
+            onClick={() => setEditingCat(true)}
+            className={`text-left truncate w-full hover:underline transition-colors ${
+              localCatName
+                ? 'text-[#8a8fad]'
+                : txn.amount < 0
+                  ? 'text-[#e39400]'   // outflow uncategorized — orange warning
+                  : 'text-[#5ccc96]'   // inflow — green
+            }`}
+            title="Click to assign category"
+          >
+            {localCatName ?? (txn.amount < 0 ? 'Uncategorized' : 'Inflow')}
+          </button>
+        )}
       </span>
 
       <span

@@ -4,7 +4,24 @@ import { revalidatePath } from 'next/cache'
 import { and, eq, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { accounts, categories, categoryGroups, monthBudgets, transactions } from '@/db/schema'
+import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
+import { normalizePayee } from '@/lib/payee'
+
+// ---------------------------------------------------------------------------
+// Internal helpers
+// ---------------------------------------------------------------------------
+async function learnPayeeRule(userId: string, payee: string | null | undefined, categoryId: string | null) {
+  if (!payee || !categoryId) return
+  const key = normalizePayee(payee)
+  if (!key) return
+  await db
+    .insert(payeeRules)
+    .values({ userId, payeeNormalized: key, categoryId })
+    .onConflictDoUpdate({
+      target: [payeeRules.userId, payeeRules.payeeNormalized],
+      set: { categoryId, updatedAt: new Date() },
+    })
+}
 
 // ---------------------------------------------------------------------------
 // Auth helper
@@ -93,6 +110,9 @@ export async function addTransaction(data: {
     })
     .returning()
 
+  // Learn payee → category mapping
+  await learnPayeeRule(userId, data.payee, data.categoryId ?? null)
+
   // Update account balance
   await db
     .update(accounts)
@@ -154,11 +174,35 @@ export async function updateTransaction(id: string, data: {
     })
     .where(eq(accounts.id, account.id))
 
+  // Learn payee → category mapping
+  await learnPayeeRule(userId, data.payee, data.categoryId ?? null)
+
   const oldMonth = txn.date.substring(0, 7)
   const newMonth = data.date.substring(0, 7)
   revalidatePath(`/budget/${oldMonth}`)
   if (newMonth !== oldMonth) revalidatePath(`/budget/${newMonth}`)
   revalidatePath('/accounts')
+  revalidatePath(`/accounts/${txn.accountId}`)
+}
+
+export async function updateTransactionCategory(id: string, categoryId: string | null) {
+  const userId = await requireUser()
+
+  const txn = await db.query.transactions.findFirst({
+    where: and(eq(transactions.id, id), eq(transactions.userId, userId)),
+  })
+  if (!txn) throw new Error('Transaction not found')
+
+  await db
+    .update(transactions)
+    .set({ categoryId, updatedAt: new Date() })
+    .where(eq(transactions.id, id))
+
+  // Learn payee → category mapping
+  await learnPayeeRule(userId, txn.payee ?? '', categoryId)
+
+  const month = txn.date.substring(0, 7)
+  revalidatePath(`/budget/${month}`)
   revalidatePath(`/accounts/${txn.accountId}`)
 }
 

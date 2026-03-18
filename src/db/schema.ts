@@ -117,6 +117,24 @@ export const transactions = pgTable('transactions', {
 })
 
 // ---------------------------------------------------------------------------
+// Payee rules — learns category from user corrections
+// ---------------------------------------------------------------------------
+export const payeeRules = pgTable(
+  'payee_rules',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    payeeNormalized: text('payee_normalized').notNull(),
+    categoryId: uuid('category_id').references(() => categories.id, { onDelete: 'set null' }),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+  },
+  (t) => [unique('ux_payee_rules').on(t.userId, t.payeeNormalized)],
+)
+
+// ---------------------------------------------------------------------------
 // Import connections (Plaid — Phase 3)
 // ---------------------------------------------------------------------------
 export const importConnections = pgTable('import_connections', {
@@ -145,6 +163,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   monthBudgets: many(monthBudgets),
   transactions: many(transactions),
   importConnections: many(importConnections),
+  payeeRules: many(payeeRules),
 }))
 
 export const accountsRelations = relations(accounts, ({ one, many }) => ({
@@ -166,6 +185,7 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   }),
   monthBudgets: many(monthBudgets),
   transactions: many(transactions),
+  payeeRules: many(payeeRules),
 }))
 
 export const monthBudgetsRelations = relations(monthBudgets, ({ one }) => ({
@@ -194,4 +214,9 @@ export const importConnectionsRelations = relations(importConnections, ({ one })
     fields: [importConnections.accountId],
     references: [accounts.id],
   }),
+}))
+
+export const payeeRulesRelations = relations(payeeRules, ({ one }) => ({
+  user: one(users, { fields: [payeeRules.userId], references: [users.id] }),
+  category: one(categories, { fields: [payeeRules.categoryId], references: [categories.id] }),
 }))

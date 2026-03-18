@@ -5,7 +5,8 @@ import { auth } from '@/auth'
 import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { db } from '@/db'
-import { accounts, importConnections, transactions } from '@/db/schema'
+import { accounts, importConnections, transactions, payeeRules } from '@/db/schema'
+import { normalizePayee } from '@/lib/payee'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -62,21 +63,32 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id
 
+  // Load user's payee → category rules for auto-categorisation
+  const userRules = await db.query.payeeRules.findMany({
+    where: eq(payeeRules.userId, userId),
+  })
+  const ruleMap = new Map(userRules.map((r) => [r.payeeNormalized, r.categoryId]))
+
   // Insert new transactions (skip duplicates by importId)
   if (added.length > 0) {
     await db
       .insert(transactions)
       .values(
-        added.map((t) => ({
-          userId,
-          accountId,
-          date: t.date,
-          payee: t.name,
-          // Plaid: positive = outflow (debit), our schema: negative = outflow
-          amount: -Math.round(t.amount * 1000),
-          cleared: true,
-          importId: t.transaction_id,
-        })),
+        added.map((t) => {
+          const key = t.name ? normalizePayee(t.name) : null
+          const categoryId = key ? (ruleMap.get(key) ?? null) : null
+          return {
+            userId,
+            accountId,
+            date: t.date,
+            payee: t.name,
+            categoryId,
+            // Plaid: positive = outflow (debit), our schema: negative = outflow
+            amount: -Math.round(t.amount * 1000),
+            cleared: true,
+            importId: t.transaction_id,
+          }
+        }),
       )
       .onConflictDoNothing()
   }
