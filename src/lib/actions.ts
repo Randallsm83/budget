@@ -5,6 +5,7 @@ import { and, eq, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
+import { isNull } from 'drizzle-orm'
 import { normalizePayee } from '@/lib/payee'
 
 // ---------------------------------------------------------------------------
@@ -490,6 +491,64 @@ export async function importTransactions(
   revalidatePath('/accounts')
   revalidatePath(`/accounts/${accountId}`)
   return { imported, skipped }
+}
+
+// ---------------------------------------------------------------------------
+// Payee rules — bulk back-fill
+// ---------------------------------------------------------------------------
+/**
+ * Re-applies saved payee rules to all uncategorized transactions for this user.
+ * Useful after adding new rules or after a large initial sync.
+ * Returns the number of transactions updated.
+ */
+export async function applyPayeeRules(): Promise<{ updated: number }> {
+  const userId = await requireUser()
+
+  // Load all payee rules
+  const userRules = await db.query.payeeRules.findMany({
+    where: eq(payeeRules.userId, userId),
+  })
+  if (userRules.length === 0) return { updated: 0 }
+
+  const ruleMap = new Map(userRules.map((r) => [r.payeeNormalized, r.categoryId]))
+
+  // Load all uncategorized transactions (only ones with a payee to match)
+  const uncategorized = await db
+    .select({ id: transactions.id, payee: transactions.payee, accountId: transactions.accountId, date: transactions.date })
+    .from(transactions)
+    .where(and(
+      eq(transactions.userId, userId),
+      isNull(transactions.categoryId),
+    ))
+
+  let updated = 0
+  const affectedAccounts = new Set<string>()
+  const affectedMonths = new Set<string>()
+
+  for (const txn of uncategorized) {
+    if (!txn.payee) continue
+    const key = normalizePayee(txn.payee)
+    const categoryId = ruleMap.get(key)
+    if (!categoryId) continue
+
+    await db
+      .update(transactions)
+      .set({ categoryId, updatedAt: new Date() })
+      .where(eq(transactions.id, txn.id))
+
+    updated++
+    affectedAccounts.add(txn.accountId)
+    affectedMonths.add(txn.date.substring(0, 7))
+  }
+
+  for (const accountId of affectedAccounts) {
+    revalidatePath(`/accounts/${accountId}`)
+  }
+  for (const month of affectedMonths) {
+    revalidatePath(`/budget/${month}`)
+  }
+
+  return { updated }
 }
 
 // ---------------------------------------------------------------------------

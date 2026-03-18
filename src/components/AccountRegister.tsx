@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
-import { deleteTransaction, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { applyPayeeRules, deleteTransaction, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
@@ -273,7 +273,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [accountName, setAccountName] = useState(account.name)
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
+  const [applyingRules, setApplyingRules] = useState(false)
   const [, startTransition] = useTransition()
+
+  async function handleApplyRules() {
+    setApplyingRules(true)
+    setSyncResult(null)
+    const result = await applyPayeeRules()
+    setApplyingRules(false)
+    setSyncResult(`Rules applied: ${result.updated} transaction${result.updated !== 1 ? 's' : ''} categorized`)
+    router.refresh()
+  }
 
   async function handleSync() {
     setSyncing(true)
@@ -351,6 +361,15 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            <button
+              onClick={handleApplyRules}
+              disabled={applyingRules}
+              title="Re-categorize uncategorized transactions using saved payee rules"
+              className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                         font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+            >
+              {applyingRules ? 'Applying…' : '★ Rules'}
+            </button>
             {connection ? (
               <button
                 onClick={handleSync}

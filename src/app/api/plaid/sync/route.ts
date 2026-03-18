@@ -5,8 +5,9 @@ import { auth } from '@/auth'
 import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { db } from '@/db'
-import { accounts, importConnections, transactions, payeeRules } from '@/db/schema'
+import { accounts, importConnections, transactions, payeeRules, categories } from '@/db/schema'
 import { normalizePayee } from '@/lib/payee'
+import { getPlaidCategoryHints } from '@/lib/plaidCategories'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -63,11 +64,25 @@ export async function POST(req: NextRequest) {
 
   const userId = session.user.id
 
-  // Load user's payee → category rules for auto-categorisation
-  const userRules = await db.query.payeeRules.findMany({
-    where: eq(payeeRules.userId, userId),
-  })
+  // Load payee rules and user categories for auto-categorisation
+  const [userRules, userCategories] = await Promise.all([
+    db.query.payeeRules.findMany({ where: eq(payeeRules.userId, userId) }),
+    db.select({ id: categories.id, name: categories.name })
+      .from(categories)
+      .where(eq(categories.userId, userId)),
+  ])
   const ruleMap = new Map(userRules.map((r) => [r.payeeNormalized, r.categoryId]))
+
+  /** Find a category by keyword hint against the user's category names. */
+  function hintCategory(primary: string | null | undefined, detailed: string | null | undefined): string | null {
+    if (!primary) return null
+    const hints = getPlaidCategoryHints(primary, detailed ?? '')
+    for (const hint of hints) {
+      const match = userCategories.find((c) => c.name.toLowerCase().includes(hint))
+      if (match) return match.id
+    }
+    return null
+  }
 
   // Insert new transactions (skip duplicates by importId)
   if (added.length > 0) {
@@ -75,8 +90,16 @@ export async function POST(req: NextRequest) {
       .insert(transactions)
       .values(
         added.map((t) => {
-          const key = t.name ? normalizePayee(t.name) : null
-          const categoryId = key ? (ruleMap.get(key) ?? null) : null
+          // Prefer merchant_name for rule lookup — it's more normalised by Plaid
+          const nameForRule = t.merchant_name ?? t.name
+          const key = nameForRule ? normalizePayee(nameForRule) : null
+          const categoryId =
+            (key ? ruleMap.get(key) : undefined)
+            ?? hintCategory(
+                t.personal_finance_category?.primary,
+                t.personal_finance_category?.detailed,
+              )
+            ?? null
           return {
             userId,
             accountId,
