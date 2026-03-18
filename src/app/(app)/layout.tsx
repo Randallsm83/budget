@@ -3,7 +3,6 @@ import { redirect } from 'next/navigation'
 import { eq, asc, and } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts } from '@/db/schema'
-import Link from 'next/link'
 import { NavLink } from '@/components/NavLink'
 import { SignOutButton } from '@/components/SignOutButton'
 import { formatMoney } from '@/lib/budget'
@@ -52,18 +51,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Budget
           </NavLink>
 
-          {/* Accounts header */}
-          <div className="pt-3 pb-1 px-3 flex items-center justify-between">
-            <p className="text-[10px] font-bold text-[#8a8fad] uppercase tracking-widest">Accounts</p>
-            <Link href="/accounts" className="text-[#8a8fad] hover:text-[#ecf0f1] transition-colors text-sm leading-none" title="Manage accounts">
-              ＋
-            </Link>
-          </div>
+          <NavLink href="/accounts" exact>
+            <span>🏦</span>
+            Accounts
+          </NavLink>
 
           {/* Assets */}
           {assets.length > 0 && (
             <>
-              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
+              <div className="px-3 pt-1.5 pb-0.5 flex justify-between items-center">
                 <span className="text-[9px] font-semibold text-[#5ccc96] uppercase tracking-widest">Assets</span>
                 <span className="text-[9px] text-[#5ccc96] tabular-nums">{formatMoney(assetTotal)}</span>
               </div>
@@ -113,7 +109,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           <div className="px-2 pb-1">
             <a
               href="/settings/security"
-              className="text-[10px] text-[#3a3b58] hover:text-[#8a8fad] transition-colors"
+              className="text-[10px] text-[#5a5b78] hover:text-[#8a8fad] transition-colors"
             >
               Security settings
             </a>
