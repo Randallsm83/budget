@@ -47,9 +47,15 @@ export function PlaidLink({ accountId, onConnected }: Props) {
 
   const { open, ready } = usePlaidLink({ token: linkToken ?? '', onSuccess })
 
+  function handleOpen() {
+    // Persist accountId so the OAuth callback page can recover it
+    sessionStorage.setItem('plaid_oauth_account_id', accountId)
+    open()
+  }
+
   return (
     <button
-      onClick={() => open()}
+      onClick={handleOpen}
       disabled={!ready || exchanging}
       title={error || undefined}
       className="border border-[#b3a1e6] text-[#b3a1e6] hover:bg-[#b3a1e6]/10 font-medium px-3 py-1.5

@@ -14,6 +14,9 @@ export async function POST() {
       products: [Products.Transactions],
       country_codes: [CountryCode.Us],
       language: 'en',
+      ...(process.env.PLAID_REDIRECT_URI
+        ? { redirect_uri: process.env.PLAID_REDIRECT_URI }
+        : {}),
     })
     return NextResponse.json({ link_token: response.data.link_token })
   } catch (err: unknown) {
