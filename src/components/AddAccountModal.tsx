@@ -18,14 +18,18 @@ function PlaidConnectSection({ onDone, onError }: { onDone: () => void; onError:
   const [connecting, setConnecting] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     fetch('/api/plaid/link-token', { method: 'POST' })
       .then(async (r) => {
+        if (cancelled) return
         const d = await r.json()
         if (d.link_token) setLinkToken(d.link_token)
         else onError(d.error ?? 'Failed to initialize Plaid')
       })
-      .catch((e) => onError(String(e)))
-  }, [onError])
+      .catch((e) => { if (!cancelled) onError(String(e)) })
+    return () => { cancelled = true }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const onSuccess = useCallback(async (publicToken: string) => {
     setConnecting(true)
@@ -183,12 +187,6 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
               Negative for credit card debt (e.g. -1500.00)
             </p>
           </div>
-
-          {error && (
-            <p className="text-sm text-[#ce6f8f] bg-[#ce6f8f]/10 border border-[#ce6f8f]/20 rounded-lg px-3 py-2">
-              {error}
-            </p>
-          )}
 
           <div className="flex gap-3 pt-1">
             <button
