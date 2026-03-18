@@ -1,6 +1,6 @@
 import { Configuration, PlaidApi, PlaidEnvironments } from 'plaid'
 
-const env = (process.env.PLAID_ENV ?? 'sandbox') as keyof typeof PlaidEnvironments
+const env = ((process.env.PLAID_ENV ?? 'sandbox').trim()) as keyof typeof PlaidEnvironments
 
 const config = new Configuration({
   basePath: PlaidEnvironments[env],
