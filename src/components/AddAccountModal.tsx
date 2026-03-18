@@ -63,7 +63,6 @@ function PlaidConnectSection({ onDone, onError }: { onDone: () => void; onError:
       >
         {connecting ? 'Connecting…' : !linkToken ? 'Loading…' : '🏦 Connect Bank'}
       </button>
-      <p className="text-xs text-[#3a3b58]">Sandbox: user_good / pass_good</p>
     </div>
   )
 }
