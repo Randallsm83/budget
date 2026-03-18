@@ -20,6 +20,7 @@ const TYPE_LABELS: Record<string, string> = {
   savings: 'Savings',
   credit_card: 'Credit Card',
   cash: 'Cash',
+  loan: 'Loan',
   other: 'Other',
 }
 

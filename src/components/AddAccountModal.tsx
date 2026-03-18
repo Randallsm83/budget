@@ -9,6 +9,7 @@ const ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings', label: 'Savings' },
   { value: 'credit_card', label: 'Credit Card' },
+  { value: 'loan', label: 'Loan / Mortgage' },
   { value: 'cash', label: 'Cash' },
   { value: 'other', label: 'Other' },
 ]

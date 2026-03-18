@@ -8,6 +8,7 @@ import { accounts, importConnections } from '@/db/schema'
 
 function mapType(account: AccountBase): string {
   if (account.type === 'credit') return 'credit_card'
+  if (account.type === 'loan') return 'loan'
   if (account.type === 'depository') {
     if (account.subtype === 'savings') return 'savings'
     if (account.subtype === 'checking') return 'checking'
@@ -19,8 +20,8 @@ function mapType(account: AccountBase): string {
 
 function mapBalance(account: AccountBase): number {
   const current = account.balances.current ?? 0
-  // Credit: Plaid positive = amount owed → store as negative (debt)
-  if (account.type === 'credit') return -Math.round(current * 1000)
+  // Credit + loan: Plaid positive = amount owed → store as negative (debt)
+  if (account.type === 'credit' || account.type === 'loan') return -Math.round(current * 1000)
   return Math.round(current * 1000)
 }
 

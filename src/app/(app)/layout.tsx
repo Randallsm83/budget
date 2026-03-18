@@ -12,8 +12,11 @@ const TYPE_ICONS: Record<string, string> = {
   savings: '💵',
   credit_card: '💳',
   cash: '💸',
+  loan: '🏠',
   other: '📁',
 }
+
+const LIABILITY_TYPES = new Set(['credit_card', 'loan'])
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -25,8 +28,8 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
     .orderBy(asc(accounts.createdAt))
 
-  const assets = userAccounts.filter((a) => a.type !== 'credit_card')
-  const liabilities = userAccounts.filter((a) => a.type === 'credit_card')
+  const assets = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type))
+  const liabilities = userAccounts.filter((a) => LIABILITY_TYPES.has(a.type))
   const assetTotal = assets.reduce((s, a) => s + a.balance, 0)
   const liabilityTotal = liabilities.reduce((s, a) => s + a.balance, 0)
   const netWorth = assetTotal + liabilityTotal
