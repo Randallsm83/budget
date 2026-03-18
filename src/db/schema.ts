@@ -128,6 +128,7 @@ export const importConnections = pgTable('import_connections', {
     onDelete: 'set null',
   }),
   plaidItemId: text('plaid_item_id'),
+  plaidAccountId: text('plaid_account_id'), // Plaid-side account identifier for filtering
   accessTokenEncrypted: text('access_token_encrypted'),
   cursor: text('cursor'), // Plaid sync cursor
   lastSyncedAt: timestamp('last_synced_at'),

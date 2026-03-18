@@ -62,6 +62,7 @@ export async function POST(req: NextRequest) {
         userId,
         accountId: newAccount.id,
         plaidItemId,
+        plaidAccountId: pa.account_id,
         accessTokenEncrypted,
       })
 

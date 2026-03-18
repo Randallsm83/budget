@@ -231,39 +231,40 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             </span>
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          {connection ? (
-            <div className="flex flex-col items-end">
+        <div className="flex flex-col items-end gap-1">
+          <div className="flex items-center gap-2">
+            {connection ? (
               <button
                 onClick={handleSync}
                 disabled={syncing}
+                title={syncResult ?? (connection.lastSyncedAt
+                  ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`
+                  : 'Never synced')}
                 className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
                            font-medium px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
               >
                 {syncing ? 'Syncing…' : '↻ Sync'}
               </button>
-              <span className="text-[10px] text-[#8a8fad] mt-0.5">
-                {syncResult ?? (connection.lastSyncedAt
-                  ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`
-                  : 'Never synced')}
-              </span>
-            </div>
-          ) : (
-            <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
+            ) : (
+              <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
+            )}
+            <button
+              onClick={() => setShowImport(true)}
+              className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
+                         font-medium px-3 py-1.5 rounded-lg text-sm transition-colors"
+            >
+              Import CSV
+            </button>
+            <button
+              onClick={() => setShowModal(true)}
+              className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
+            >
+              + Add Transaction
+            </button>
+          </div>
+          {syncResult && (
+            <span className="text-[10px] text-[#8a8fad]">{syncResult}</span>
           )}
-          <button
-            onClick={() => setShowImport(true)}
-            className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
-                       font-medium px-3 py-1.5 rounded-lg text-sm transition-colors"
-          >
-            Import CSV
-          </button>
-          <button
-            onClick={() => setShowModal(true)}
-            className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
-          >
-            + Add Transaction
-          </button>
         </div>
       </div>
 
