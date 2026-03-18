@@ -1,12 +1,20 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, max, count, sql } from 'drizzle-orm'
+import { and, eq, isNull, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
-import { isNull } from 'drizzle-orm'
 import { normalizePayee } from '@/lib/payee'
+
+/**
+ * Legacy normalization (pre-da2c044) — strips non-letters entirely rather than
+ * replacing with a space.  Used as a fallback so rules saved before the
+ * normalization change still match.
+ */
+function normalizePayeeLegacy(name: string): string {
+  return name.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim()
+}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -528,7 +536,9 @@ export async function applyPayeeRules(): Promise<{ updated: number }> {
   for (const txn of uncategorized) {
     if (!txn.payee) continue
     const key = normalizePayee(txn.payee)
-    const categoryId = ruleMap.get(key)
+    // Fall back to legacy key for rules saved before the normalisation change
+    const legacyKey = normalizePayeeLegacy(txn.payee)
+    const categoryId = ruleMap.get(key) ?? ruleMap.get(legacyKey)
     if (!categoryId) continue
 
     await db

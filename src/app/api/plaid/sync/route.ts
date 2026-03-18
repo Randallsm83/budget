@@ -30,9 +30,13 @@ export async function POST(req: NextRequest) {
   const plaidAccountId = connection.plaidAccountId ?? undefined
 
   // Page through all available transaction updates, filtered to this account
+  // Note: Plaid does an async historical pull in the background.  The first
+  // sync typically returns only the last ~30 days.  Subsequent syncs (using
+  // the saved cursor) will pick up the rest as Plaid completes the pull.
+  const isFirstSync = !connection.cursor
   let cursor: string | undefined = connection.cursor ?? undefined
   let hasMore = true
-  let added: PlaidTransaction[] = []
+  const added: PlaidTransaction[] = []
   const modified: PlaidTransaction[] = []
   const removed: RemovedTransaction[] = []
 
@@ -46,20 +50,6 @@ export async function POST(req: NextRequest) {
     removed.push(...res.data.removed)
     cursor = res.data.next_cursor
     hasMore = res.data.has_more
-  }
-
-  // Plaid sandbox can return 0 on first sync — fall back to transactionsGet
-  if (added.length === 0 && !connection.cursor && plaidAccountId) {
-    const today = new Date().toISOString().split('T')[0]
-    try {
-      const fallback = await plaidClient.transactionsGet({
-        access_token: accessToken,
-        start_date: '2020-01-01',
-        end_date: today,
-        options: { account_ids: [plaidAccountId] },
-      })
-      added = fallback.data.transactions
-    } catch { /* ignore — fallback best-effort */ }
   }
 
   const userId = session.user.id
@@ -90,9 +80,9 @@ export async function POST(req: NextRequest) {
       .insert(transactions)
       .values(
         added.map((t) => {
-          // Prefer merchant_name for rule lookup — it's more normalised by Plaid
-          const nameForRule = t.merchant_name ?? t.name
-          const key = nameForRule ? normalizePayee(nameForRule) : null
+          // Use t.name for the rule key — consistent with learnPayeeRule which
+          // also keys on the stored payee field (t.name).
+          const key = t.name ? normalizePayee(t.name) : null
           const categoryId =
             (key ? ruleMap.get(key) : undefined)
             ?? hintCategory(
@@ -165,5 +155,13 @@ export async function POST(req: NextRequest) {
     .set({ cursor, lastSyncedAt: new Date() })
     .where(eq(importConnections.id, connection.id))
 
-  return NextResponse.json({ success: true, added: added.length, modified: modified.length, removed: removed.length })
+  return NextResponse.json({
+    success: true,
+    added: added.length,
+    modified: modified.length,
+    removed: removed.length,
+    // Hint to the client that Plaid’s background historical pull may still be
+    // in progress — the user should sync again in a few minutes.
+    firstSync: isFirstSync,
+  })
 }

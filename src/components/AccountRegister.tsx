@@ -279,10 +279,16 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   async function handleApplyRules() {
     setApplyingRules(true)
     setSyncResult(null)
-    const result = await applyPayeeRules()
-    setApplyingRules(false)
-    setSyncResult(`Rules applied: ${result.updated} transaction${result.updated !== 1 ? 's' : ''} categorized`)
-    router.refresh()
+    try {
+      const result = await applyPayeeRules()
+      setSyncResult(`Rules applied: ${result.updated} transaction${result.updated !== 1 ? 's' : ''} categorized`)
+      router.refresh()
+    } catch (err) {
+      console.error('applyPayeeRules error:', err)
+      setSyncResult('Error applying rules — check console')
+    } finally {
+      setApplyingRules(false)
+    }
   }
 
   async function handleSync() {
@@ -296,10 +302,12 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     const data = await res.json()
     setSyncing(false)
     if (res.ok) {
-      setSyncResult(`+${data.added} added, ${data.modified} updated, ${data.removed} removed`)
+      let msg = `+${data.added} added, ${data.modified} updated, ${data.removed} removed`
+      if (data.firstSync) msg += ' · Plaid is loading older history — sync again in a few minutes'
+      setSyncResult(msg)
       router.refresh()
     } else {
-      setSyncResult('Sync failed')
+      setSyncResult(`Sync failed: ${data.error ?? 'unknown error'}`)
     }
   }
 
