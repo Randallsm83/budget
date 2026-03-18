@@ -43,12 +43,12 @@ export default function PrivacyPage() {
           Plaid, which is used solely to retrieve your transaction and account data on your behalf.
           Plaid&apos;s privacy policy is available at{" "}
           <a
-            href="https://plaid.com/legal/privacy-policy"
+            href="https://plaid.com/legal/#end-user-privacy-policy"
             target="_blank"
             rel="noopener noreferrer"
             className="text-blue-400 underline"
           >
-            plaid.com/legal/privacy-policy
+            plaid.com/legal/#end-user-privacy-policy
           </a>
           .
         </p>
