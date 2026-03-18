@@ -78,5 +78,11 @@ The JWT callback in `src/auth.ts` propagates `user.id` into the token, and the s
 ### Income categories vs. expense categories
 `categoryGroups.isIncome = true` marks income groups. Income category transactions feed "Ready to Assign" (RTA); expense category transactions consume it. The budget page differentiates these during its iterative calculation.
 
-### Account types
-Valid account types: `checking`, `savings`, `credit_card`, `cash`, `loan`, `real_estate`, `vehicle`, `investment`, `other`. Liabilities (`credit_card`, `loan`) are grouped separately in the sidebar. Balances for liabilities are negative.
+### Account types: on-budget vs. tracking
+Valid account types: `checking`, `savings`, `credit_card`, `cash`, `loan`, `real_estate`, `vehicle`, `investment`, `other`.
+
+**On-budget** (`checking`, `savings`, `cash`, `credit_card`) — transactions from these accounts feed the budget: they appear in category activity and uncategorized positive amounts contribute to "Ready to Assign".
+
+**Tracking** (`investment`, `real_estate`, `vehicle`, `loan`, `other`) — off-budget accounts used only for net worth in the sidebar. Their transactions are intentionally excluded from the budget page calculation (`src/app/(app)/budget/[month]/page.tsx` filters to `ON_BUDGET_TYPES` before querying transactions). Starting balances for large tracking accounts (e.g. a $200k house) would otherwise inflate RTA incorrectly.
+
+Liabilities (`credit_card`, `loan`) are grouped separately in the sidebar. Balances for liabilities are negative.

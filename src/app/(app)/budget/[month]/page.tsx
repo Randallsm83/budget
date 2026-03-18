@@ -1,7 +1,7 @@
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { transactions, monthBudgets, categoryGroups, categories } from '@/db/schema'
-import { asc, and, eq, lt, lte } from 'drizzle-orm'
+import { accounts, transactions, monthBudgets, categoryGroups, categories } from '@/db/schema'
+import { asc, and, eq, inArray, lt, lte } from 'drizzle-orm'
 import Link from 'next/link'
 import { BudgetTable, type GroupRow } from '@/components/BudgetTable'
 import {
@@ -37,6 +37,20 @@ export default async function BudgetPage({ params }: Props) {
   const nextMonthStart = firstDayOfNextMonth(month)
 
   // -------------------------------------------------------------------------
+  // Determine on-budget account IDs (checking, savings, cash, credit_card).
+  // Tracking accounts (investment, real_estate, vehicle, loan, other) are
+  // excluded from budget math — they only appear in the net worth sidebar.
+  // -------------------------------------------------------------------------
+  const ON_BUDGET_TYPES = ['checking', 'savings', 'cash', 'credit_card']
+
+  const budgetAccts = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), inArray(accounts.type, ON_BUDGET_TYPES)))
+
+  const budgetAccountIds = budgetAccts.map((a) => a.id)
+
+  // -------------------------------------------------------------------------
   // Fetch all groups + categories (for structure)
   // -------------------------------------------------------------------------
   const groups = await db.query.categoryGroups.findMany({
@@ -54,12 +68,19 @@ export default async function BudgetPage({ params }: Props) {
   )
 
   // -------------------------------------------------------------------------
-  // Fetch all transactions up to (but not including) next month start
+  // Fetch all transactions up to (but not including) next month start,
+  // restricted to on-budget accounts only.
   // -------------------------------------------------------------------------
-  const allTxns = await db
-    .select()
-    .from(transactions)
-    .where(and(eq(transactions.userId, userId), lt(transactions.date, nextMonthStart)))
+  const allTxns = budgetAccountIds.length === 0
+    ? []
+    : await db
+        .select()
+        .from(transactions)
+        .where(and(
+          eq(transactions.userId, userId),
+          lt(transactions.date, nextMonthStart),
+          inArray(transactions.accountId, budgetAccountIds),
+        ))
 
   // -------------------------------------------------------------------------
   // Fetch all month_budgets up to and including target month
