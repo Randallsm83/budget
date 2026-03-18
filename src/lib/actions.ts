@@ -295,18 +295,19 @@ export async function closeAccount(id: string) {
 export async function deleteAccount(id: string) {
   const userId = await requireUser()
 
-  const [row] = await db
-    .select({ val: count(transactions.id) })
-    .from(transactions)
-    .where(and(eq(transactions.accountId, id), eq(transactions.userId, userId)))
-
-  if ((row?.val ?? 0) > 0) throw new Error('Account has transactions — delete them first')
+  // Transactions are cascade-deleted by the DB (onDelete: 'cascade').
+  // Verify ownership before deleting.
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, id), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
 
   await db
     .delete(accounts)
     .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
 
   revalidatePath('/accounts')
+  revalidatePath('/')
 }
 
 // ---------------------------------------------------------------------------

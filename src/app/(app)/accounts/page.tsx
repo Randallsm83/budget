@@ -43,7 +43,8 @@ export default function AccountsPage() {
     })
   }
 
-  function handleDelete(id: string) {
+  function handleDelete(id: string, name: string) {
+    if (!confirm(`Delete "${name}" and all its transactions? This cannot be undone.`)) return
     startTransition(async () => {
       try {
         await deleteAccount(id)
@@ -144,7 +145,7 @@ export default function AccountsPage() {
                       Close
                     </button>
                     <button
-                      onClick={() => handleDelete(account.id)}
+                      onClick={() => handleDelete(account.id, account.name)}
                       title="Delete account"
                       className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1.5 py-0.5 rounded
                                  hover:bg-[#ce6f8f]/10 transition-colors"
@@ -156,7 +157,7 @@ export default function AccountsPage() {
               </div>
             ))}
 
-            {closed.length > 0 && (
+            {closed.length > 0
               <div className="pt-2">
                 <button
                   onClick={() => setShowClosed((v) => !v)}
@@ -198,7 +199,7 @@ export default function AccountsPage() {
                               Reopen
                             </button>
                             <button
-                              onClick={() => handleDelete(account.id)}
+                              onClick={() => handleDelete(account.id, account.name)}
                               title="Delete account"
                               className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1.5 py-0.5 rounded
                                          hover:bg-[#ce6f8f]/10 transition-colors"
