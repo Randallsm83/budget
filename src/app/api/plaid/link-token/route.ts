@@ -17,7 +17,8 @@ export async function POST() {
     })
     return NextResponse.json({ link_token: response.data.link_token })
   } catch (err: unknown) {
-    const msg = err instanceof Error ? err.message : JSON.stringify(err)
+    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
+    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : JSON.stringify(err))
     console.error('[plaid/link-token]', msg)
     return NextResponse.json({ error: msg }, { status: 500 })
   }
