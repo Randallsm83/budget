@@ -8,9 +8,12 @@ import { addAccount } from '@/lib/actions'
 const ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings', label: 'Savings' },
+  { value: 'cash', label: 'Cash' },
   { value: 'credit_card', label: 'Credit Card' },
   { value: 'loan', label: 'Loan / Mortgage' },
-  { value: 'cash', label: 'Cash' },
+  { value: 'real_estate', label: 'Real Estate' },
+  { value: 'vehicle', label: 'Vehicle' },
+  { value: 'investment', label: 'Investment' },
   { value: 'other', label: 'Other' },
 ]
 

@@ -21,6 +21,9 @@ const TYPE_LABELS: Record<string, string> = {
   credit_card: 'Credit Card',
   cash: 'Cash',
   loan: 'Loan',
+  real_estate: 'Real Estate',
+  vehicle: 'Vehicle',
+  investment: 'Investment',
   other: 'Other',
 }
 
