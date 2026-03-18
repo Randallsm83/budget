@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { accounts, transactions, categories, categoryGroups } from '@/db/schema'
+import { accounts, transactions, categories, categoryGroups, importConnections } from '@/db/schema'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { AccountRegister } from '@/components/AccountRegister'
@@ -45,6 +45,13 @@ export default async function AccountRegisterPage({ params }: Props) {
     .where(and(eq(accounts.userId, userId)))
     .orderBy(asc(accounts.createdAt))
 
+  const connection = await db.query.importConnections.findFirst({
+    where: and(
+      eq(importConnections.accountId, accountId),
+      eq(importConnections.userId, userId),
+    ),
+  })
+
   // All user categories (for the transaction modal)
   const allCats = await db
     .select({
@@ -60,6 +67,7 @@ export default async function AccountRegisterPage({ params }: Props) {
   return (
     <AccountRegister
       account={{ id: account.id, name: account.name, type: account.type, balance: account.balance, clearedBalance: account.clearedBalance }}
+      connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null } : null}
       transactions={txns.map((t) => ({
         id: t.id,
         accountId: account.id,

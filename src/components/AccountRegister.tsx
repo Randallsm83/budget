@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
+import { PlaidLink } from './PlaidLink'
 import { deleteTransaction, toggleCleared, updateAccount } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
@@ -33,6 +34,7 @@ interface Props {
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
   allCategories: { id: string; name: string; groupName: string }[]
+  connection: { id: string; lastSyncedAt: string | null } | null
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -144,7 +146,7 @@ function TransactionRow({
   )
 }
 
-export function AccountRegister({ account, transactions, allAccounts, allCategories }: Props) {
+export function AccountRegister({ account, transactions, allAccounts, allCategories, connection }: Props) {
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -152,7 +154,27 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [txns, setTxns] = useState(transactions)
   const [renamingAccount, setRenamingAccount] = useState(false)
   const [accountName, setAccountName] = useState(account.name)
+  const [syncing, setSyncing] = useState(false)
+  const [syncResult, setSyncResult] = useState<string | null>(null)
   const [, startTransition] = useTransition()
+
+  async function handleSync() {
+    setSyncing(true)
+    setSyncResult(null)
+    const res = await fetch('/api/plaid/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    })
+    const data = await res.json()
+    setSyncing(false)
+    if (res.ok) {
+      setSyncResult(`+${data.added} added, ${data.modified} updated, ${data.removed} removed`)
+      router.refresh()
+    } else {
+      setSyncResult('Sync failed')
+    }
+  }
 
   function commitRename(name: string) {
     setRenamingAccount(false)
@@ -209,7 +231,26 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             </span>
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex items-center gap-2">
+          {connection ? (
+            <div className="flex flex-col items-end">
+              <button
+                onClick={handleSync}
+                disabled={syncing}
+                className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                           font-medium px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {syncing ? 'Syncing…' : '↻ Sync'}
+              </button>
+              <span className="text-[10px] text-[#8a8fad] mt-0.5">
+                {syncResult ?? (connection.lastSyncedAt
+                  ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`
+                  : 'Never synced')}
+              </span>
+            </div>
+          ) : (
+            <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
+          )}
           <button
             onClick={() => setShowImport(true)}
             className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
