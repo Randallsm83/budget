@@ -1,20 +1,11 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull, max, count, sql } from 'drizzle-orm'
+import { and, eq, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
 import { normalizePayee } from '@/lib/payee'
-
-/**
- * Legacy normalization (pre-da2c044) — strips non-letters entirely rather than
- * replacing with a space.  Used as a fallback so rules saved before the
- * normalization change still match.
- */
-function normalizePayeeLegacy(name: string): string {
-  return name.toLowerCase().replace(/[^a-z\s]/g, '').replace(/\s+/g, ' ').trim()
-}
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -505,22 +496,51 @@ export async function importTransactions(
 // Payee rules — bulk back-fill
 // ---------------------------------------------------------------------------
 /**
- * Re-applies saved payee rules to all uncategorized transactions for this user.
- * Useful after adding new rules or after a large initial sync.
- * Returns the number of transactions updated.
+ * Re-applies payee rules to all uncategorized transactions for this user.
+ *
+ * Rather than trusting the payee_rules table (which may contain keys from an
+ * older normaliser or per-order merchant codes), we rebuild the rule map live
+ * from every already-categorized transaction.  This means:
+ *   - "Amazon.com*ABC123" and "Amazon.com*XYZ789" both resolve to "amazon com"
+ *     and share a single rule, regardless of what is stored in payee_rules.
+ *   - Rules saved with a previous normaliser are auto-corrected on each run.
+ *
+ * We also persist the rebuilt rules back to payee_rules so the sync route can
+ * apply them to incoming transactions without re-scanning all history.
  */
 export async function applyPayeeRules(): Promise<{ updated: number }> {
   const userId = await requireUser()
 
-  // Load all payee rules
-  const userRules = await db.query.payeeRules.findMany({
-    where: eq(payeeRules.userId, userId),
-  })
-  if (userRules.length === 0) return { updated: 0 }
+  // Step 1 — Build a fresh rule map from every categorized transaction
+  const categorized = await db
+    .select({ payee: transactions.payee, categoryId: transactions.categoryId })
+    .from(transactions)
+    .where(and(
+      eq(transactions.userId, userId),
+      isNotNull(transactions.categoryId),
+    ))
 
-  const ruleMap = new Map(userRules.map((r) => [r.payeeNormalized, r.categoryId]))
+  const freshMap = new Map<string, string>()
+  for (const txn of categorized) {
+    if (!txn.payee || !txn.categoryId) continue
+    const key = normalizePayee(txn.payee)
+    if (key) freshMap.set(key, txn.categoryId)
+  }
 
-  // Load all uncategorized transactions (only ones with a payee to match)
+  if (freshMap.size === 0) return { updated: 0 }
+
+  // Step 2 — Persist fresh rules (upsert) so sync can use them going forward
+  for (const [key, categoryId] of freshMap) {
+    await db
+      .insert(payeeRules)
+      .values({ userId, payeeNormalized: key, categoryId })
+      .onConflictDoUpdate({
+        target: [payeeRules.userId, payeeRules.payeeNormalized],
+        set: { categoryId, updatedAt: new Date() },
+      })
+  }
+
+  // Step 3 — Apply to uncategorized transactions
   const uncategorized = await db
     .select({ id: transactions.id, payee: transactions.payee, accountId: transactions.accountId, date: transactions.date })
     .from(transactions)
@@ -536,9 +556,7 @@ export async function applyPayeeRules(): Promise<{ updated: number }> {
   for (const txn of uncategorized) {
     if (!txn.payee) continue
     const key = normalizePayee(txn.payee)
-    // Fall back to legacy key for rules saved before the normalisation change
-    const legacyKey = normalizePayeeLegacy(txn.payee)
-    const categoryId = ruleMap.get(key) ?? ruleMap.get(legacyKey)
+    const categoryId = freshMap.get(key)
     if (!categoryId) continue
 
     await db

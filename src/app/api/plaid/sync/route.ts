@@ -80,9 +80,11 @@ export async function POST(req: NextRequest) {
       .insert(transactions)
       .values(
         added.map((t) => {
-          // Use t.name for the rule key — consistent with learnPayeeRule which
-          // also keys on the stored payee field (t.name).
-          const key = t.name ? normalizePayee(t.name) : null
+          // Use merchant_name (cleaned, deduplicated) when available; it collapses
+          // location variants like "STARBUCKS #1234 SEATTLE" to just "Starbucks",
+          // making rules far more portable across stores.
+          const storedPayee = t.merchant_name ?? t.name
+          const key = storedPayee ? normalizePayee(storedPayee) : null
           const categoryId =
             (key ? ruleMap.get(key) : undefined)
             ?? hintCategory(
@@ -94,7 +96,7 @@ export async function POST(req: NextRequest) {
             userId,
             accountId,
             date: t.date,
-            payee: t.name,
+            payee: storedPayee,
             categoryId,
             // Plaid: positive = outflow (debit), our schema: negative = outflow
             amount: -Math.round(t.amount * 1000),
