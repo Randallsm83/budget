@@ -33,7 +33,7 @@ interface Props {
   account: Account
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
-  allCategories: { id: string; name: string; groupName: string }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean }[]
   connection: { id: string; lastSyncedAt: string | null } | null
 }
 

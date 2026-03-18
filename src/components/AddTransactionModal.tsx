@@ -7,6 +7,7 @@ interface CategoryOption {
   id: string
   name: string
   groupName: string
+  isIncome: boolean
 }
 
 interface AccountOption {
@@ -42,11 +43,13 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
     : ''
 
   const [accountId, setAccountId] = useState(initialValues?.accountId ?? defaultAccountId ?? accounts[0]?.id ?? '')
-  const [categoryId, setCategoryId] = useState(initialValues?.categoryId ?? '')
+  const initCat = initialValues?.categoryId ?? ''
+  const initIsIncome = categories.find((c) => c.id === initCat)?.isIncome ?? false
+  const [categoryId, setCategoryId] = useState(initCat)
   const [date, setDate] = useState(initialValues?.date ?? today)
   const [payee, setPayee] = useState(initialValues?.payee ?? '')
   const [amount, setAmount] = useState(initAmount)
-  const [isOutflow, setIsOutflow] = useState(initOutflow)
+  const [isOutflow, setIsOutflow] = useState(initOutflow && !initIsIncome)
   const [memo, setMemo] = useState(initialValues?.memo ?? '')
   const [error, setError] = useState('')
   const [isPending, startTransition] = useTransition()
@@ -149,20 +152,33 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
           {/* Category */}
           <div>
             <label className="block text-xs font-medium text-[#8a8fad] mb-1.5 uppercase tracking-wide">
-              Category <span className="normal-case text-[#3a3b58]">(leave blank for income)</span>
+              Category
             </label>
             <select
               value={categoryId}
-              onChange={(e) => setCategoryId(e.target.value)}
+              onChange={(e) => {
+                const cat = categories.find((c) => c.id === e.target.value)
+                setCategoryId(e.target.value)
+                if (cat) setIsOutflow(!cat.isIncome)
+              }}
               className="w-full bg-[#2a2b45] border border-[#3a3b58] text-[#ecf0f1] rounded-lg px-3 py-2 text-sm
                          focus:outline-none focus:border-[#b3a1e6] transition-colors"
             >
               <option value="">— Inflow / Ready to Assign —</option>
-              {categories.map((c) => (
-                <option key={c.id} value={c.id}>
-                  {c.groupName}: {c.name}
-                </option>
-              ))}
+              {categories.some((c) => c.isIncome) && (
+                <optgroup label="— Income —">
+                  {categories.filter((c) => c.isIncome).map((c) => (
+                    <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                  ))}
+                </optgroup>
+              )}
+              {categories.some((c) => !c.isIncome) && (
+                <optgroup label="— Expenses —">
+                  {categories.filter((c) => !c.isIncome).map((c) => (
+                    <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                  ))}
+                </optgroup>
+              )}
             </select>
           </div>
 

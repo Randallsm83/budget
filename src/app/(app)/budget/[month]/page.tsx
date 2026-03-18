@@ -48,6 +48,10 @@ export default async function BudgetPage({ params }: Props) {
   })
 
   const allCategoryIds = groups.flatMap((g) => g.categories.map((c) => c.id))
+  // Set of category IDs that belong to income groups
+  const incomeCatIds = new Set(
+    groups.filter((g) => g.isIncome).flatMap((g) => g.categories.map((c) => c.id))
+  )
 
   // -------------------------------------------------------------------------
   // Fetch all transactions up to (but not including) next month start
@@ -67,11 +71,13 @@ export default async function BudgetPage({ params }: Props) {
 
   // -------------------------------------------------------------------------
   // Build lookup maps
-  // activityMap[month][categoryId] = sum of amounts
+  // activityMap[month][categoryId] = sum of amounts (all categorized txns)
   // inflowMap[month]               = sum of uncategorized positive amounts
+  // incomeMap[month]               = sum of income-category transactions → feeds RTA
   // -------------------------------------------------------------------------
   const activityMap: Record<string, Record<string, number>> = {}
   const inflowMap: Record<string, number> = {}
+  const incomeMap: Record<string, number> = {}
 
   for (const txn of allTxns) {
     const txnMonth = txn.date.substring(0, 7)
@@ -79,6 +85,10 @@ export default async function BudgetPage({ params }: Props) {
       activityMap[txnMonth] ??= {}
       activityMap[txnMonth][txn.categoryId] =
         (activityMap[txnMonth][txn.categoryId] ?? 0) + txn.amount
+      // Income category transactions also feed RTA
+      if (incomeCatIds.has(txn.categoryId)) {
+        incomeMap[txnMonth] = (incomeMap[txnMonth] ?? 0) + txn.amount
+      }
     } else if (txn.amount > 0) {
       inflowMap[txnMonth] = (inflowMap[txnMonth] ?? 0) + txn.amount
     }
@@ -105,16 +115,19 @@ export default async function BudgetPage({ params }: Props) {
   for (const m of sortedMonths) {
     const mActivity = activityMap[m] ?? {}
     const mBudget = budgetMap[m] ?? {}
-    let totalBudgeted = 0
+    let totalExpenseBudgeted = 0
 
     for (const catId of allCategoryIds) {
+      const isIncomeCat = incomeCatIds.has(catId)
       const activity = mActivity[catId] ?? 0
       const budgeted = mBudget[catId] ?? 0
-      balanceMap[catId] = (balanceMap[catId] ?? 0) + budgeted + activity
-      totalBudgeted += budgeted
+      // Income: balance = received - expected. Expense: balance = budgeted + spending
+      balanceMap[catId] = (balanceMap[catId] ?? 0) + (isIncomeCat ? activity - budgeted : budgeted + activity)
+      if (!isIncomeCat) totalExpenseBudgeted += budgeted
     }
 
-    rta += (inflowMap[m] ?? 0) - totalBudgeted
+    // RTA = uncategorized inflows + income-category receipts - expense budgeted
+    rta += (inflowMap[m] ?? 0) + (incomeMap[m] ?? 0) - totalExpenseBudgeted
   }
 
   // -------------------------------------------------------------------------
@@ -134,6 +147,7 @@ export default async function BudgetPage({ params }: Props) {
     return {
       id: g.id,
       name: g.name,
+      isIncome: g.isIncome,
       categories: cats,
       totalBudgeted: cats.reduce((s, c) => s + c.budgeted, 0),
       totalActivity: cats.reduce((s, c) => s + c.activity, 0),

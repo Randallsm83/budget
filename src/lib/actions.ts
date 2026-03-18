@@ -268,7 +268,7 @@ export async function deleteAccount(id: string) {
 // ---------------------------------------------------------------------------
 // Category groups
 // ---------------------------------------------------------------------------
-export async function addCategoryGroup(name: string) {
+export async function addCategoryGroup(name: string, isIncome = false) {
   const userId = await requireUser()
   if (!name.trim()) throw new Error('Name is required')
 
@@ -281,7 +281,7 @@ export async function addCategoryGroup(name: string) {
 
   const [group] = await db
     .insert(categoryGroups)
-    .values({ userId, name: name.trim(), sortOrder })
+    .values({ userId, name: name.trim(), isIncome, sortOrder })
     .returning()
 
   revalidatePath('/budget')

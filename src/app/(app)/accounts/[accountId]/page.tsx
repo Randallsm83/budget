@@ -58,6 +58,7 @@ export default async function AccountRegisterPage({ params }: Props) {
       id: categories.id,
       name: categories.name,
       groupName: categoryGroups.name,
+      isIncome: categoryGroups.isIncome,
     })
     .from(categories)
     .leftJoin(categoryGroups, eq(categories.groupId, categoryGroups.id))
@@ -87,6 +88,7 @@ export default async function AccountRegisterPage({ params }: Props) {
         id: c.id,
         name: c.name,
         groupName: c.groupName ?? '',
+        isIncome: c.isIncome ?? false,
       }))}
     />
   )
