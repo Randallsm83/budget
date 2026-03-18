@@ -14,7 +14,7 @@ function mapType(account: AccountBase): string {
     if (account.subtype === 'checking') return 'checking'
     return 'checking'
   }
-  if (account.type === 'investment') return 'other'
+  if (account.type === 'investment') return 'investment'
   return 'other'
 }
 

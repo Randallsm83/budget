@@ -20,7 +20,8 @@ const TYPE_ICONS: Record<string, string> = {
 }
 
 const LIABILITY_TYPES = new Set(['credit_card', 'loan'])
-const PROPERTY_TYPES = new Set(['real_estate', 'vehicle', 'investment', 'other'])
+const INVESTMENT_TYPES = new Set(['investment'])
+const PROPERTY_TYPES = new Set(['real_estate', 'vehicle', 'other'])
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const session = await auth()
@@ -32,13 +33,15 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
     .orderBy(asc(accounts.createdAt))
 
-  const cashAccounts = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type) && !PROPERTY_TYPES.has(a.type))
+  const cashAccounts = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type) && !INVESTMENT_TYPES.has(a.type) && !PROPERTY_TYPES.has(a.type))
+  const investmentAccounts = userAccounts.filter((a) => INVESTMENT_TYPES.has(a.type))
   const propertyAccounts = userAccounts.filter((a) => PROPERTY_TYPES.has(a.type))
   const liabilities = userAccounts.filter((a) => LIABILITY_TYPES.has(a.type))
   const cashTotal = cashAccounts.reduce((s, a) => s + a.balance, 0)
+  const investmentTotal = investmentAccounts.reduce((s, a) => s + a.balance, 0)
   const propertyTotal = propertyAccounts.reduce((s, a) => s + a.balance, 0)
   const liabilityTotal = liabilities.reduce((s, a) => s + a.balance, 0)
-  const netWorth = cashTotal + propertyTotal + liabilityTotal
+  const netWorth = cashTotal + investmentTotal + propertyTotal + liabilityTotal
 
   return (
     <div className="flex h-screen bg-[#1a1b2e] text-[#ecf0f1] overflow-hidden">
@@ -82,7 +85,24 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             </>
           )}
 
-          {/* Property & Investments */}
+          {/* Investments */}
+          {investmentAccounts.length > 0 && (
+            <>
+              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
+                <span className="text-[9px] font-semibold text-[#f2ce00] uppercase tracking-widest">Investments</span>
+                <span className="text-[9px] text-[#f2ce00] tabular-nums">{formatMoney(investmentTotal)}</span>
+              </div>
+              {investmentAccounts.map((account) => (
+                <NavLink key={account.id} href={`/accounts/${account.id}`}>
+                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="flex-1 truncate text-xs">{account.name}</span>
+                  <span className="text-xs tabular-nums flex-shrink-0 text-[#f2ce00]">{formatMoney(account.balance)}</span>
+                </NavLink>
+              ))}
+            </>
+          )}
+
+          {/* Property */}
           {propertyAccounts.length > 0 && (
             <>
               <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
