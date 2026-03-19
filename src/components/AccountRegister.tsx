@@ -281,7 +281,15 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     setSyncResult(null)
     try {
       const result = await applyPayeeRules()
-      setSyncResult(`Rules applied: ${result.updated} transaction${result.updated !== 1 ? 's' : ''} categorized`)
+      let msg: string
+      if (result.rules === 0) {
+        msg = 'No rules yet — categorize some transactions first'
+      } else if (result.scanned === 0) {
+        msg = `All transactions already categorized (${result.rules} rule${result.rules !== 1 ? 's' : ''} ready)`
+      } else {
+        msg = `${result.updated} of ${result.scanned} uncategorized matched (${result.rules} rules)`
+      }
+      setSyncResult(msg)
       router.refresh()
     } catch (err) {
       console.error('applyPayeeRules error:', err)

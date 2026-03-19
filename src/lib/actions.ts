@@ -508,7 +508,7 @@ export async function importTransactions(
  * We also persist the rebuilt rules back to payee_rules so the sync route can
  * apply them to incoming transactions without re-scanning all history.
  */
-export async function applyPayeeRules(): Promise<{ updated: number }> {
+export async function applyPayeeRules(): Promise<{ updated: number; scanned: number; rules: number }> {
   const userId = await requireUser()
 
   // Step 1 — Build a fresh rule map from every categorized transaction
@@ -527,7 +527,7 @@ export async function applyPayeeRules(): Promise<{ updated: number }> {
     if (key) freshMap.set(key, txn.categoryId)
   }
 
-  if (freshMap.size === 0) return { updated: 0 }
+  if (freshMap.size === 0) return { updated: 0, scanned: 0, rules: 0 }
 
   // Step 2 — Persist fresh rules (upsert) so sync can use them going forward
   for (const [key, categoryId] of freshMap) {
@@ -576,7 +576,7 @@ export async function applyPayeeRules(): Promise<{ updated: number }> {
     revalidatePath(`/budget/${month}`)
   }
 
-  return { updated }
+  return { updated, scanned: uncategorized.length, rules: freshMap.size }
 }
 
 // ---------------------------------------------------------------------------
