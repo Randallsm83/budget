@@ -17,6 +17,9 @@ export async function POST() {
       ...(process.env.PLAID_REDIRECT_URI
         ? { redirect_uri: process.env.PLAID_REDIRECT_URI }
         : {}),
+      ...(process.env.PLAID_WEBHOOK_URL
+        ? { webhook: process.env.PLAID_WEBHOOK_URL }
+        : {}),
     })
     return NextResponse.json({ link_token: response.data.link_token })
   } catch (err: unknown) {

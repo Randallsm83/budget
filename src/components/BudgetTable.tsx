@@ -492,7 +492,9 @@ function AddGroupRow() {
       <div className="flex rounded-lg bg-[#2a2b45] p-0.5 w-fit">
         {(['expense', 'income', 'transfer'] as const).map((t) => (
           <button
-            key={t} type="button" onClick={() => setGroupType(t)}
+            key={t} type="button"
+            onMouseDown={(e) => e.preventDefault()}
+            onClick={() => { setGroupType(t); ref.current?.focus() }}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               groupType === t
                 ? t === 'income' ? 'bg-[#5ccc96] text-[#1a1b2e]'
@@ -519,7 +521,11 @@ function AddGroupRow() {
           className="flex-1 bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] text-sm rounded
                      px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] disabled:opacity-50"
         />
-        <button onClick={() => { setOpen(false); setName(''); setGroupType('expense') }} className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1">✕</button>
+        <button
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={() => { setOpen(false); setName(''); setGroupType('expense') }}
+          className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1"
+        >✕</button>
       </div>
     </div>
   )
