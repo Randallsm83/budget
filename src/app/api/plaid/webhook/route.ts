@@ -63,6 +63,15 @@ export async function POST(req: NextRequest) {
         await markRelinkRequired(item_id)
       }
 
+      if (webhook_code === 'LOGIN_REPAIRED') {
+        // Another app (or this one) repaired the Item — dismiss any relink prompt
+        console.log(`[plaid/webhook] LOGIN_REPAIRED for item ${item_id} — clearing relink flag`)
+        await db
+          .update(importConnections)
+          .set({ requiresRelink: false })
+          .where(eq(importConnections.plaidItemId, item_id))
+      }
+
       if (webhook_code === 'USER_PERMISSION_REVOKED') {
         console.log(`[plaid/webhook] USER_PERMISSION_REVOKED for item ${item_id} — marking relink required`)
         await markRelinkRequired(item_id)

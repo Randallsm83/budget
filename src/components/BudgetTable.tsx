@@ -544,9 +544,9 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
       <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-6 py-1.5
                       bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
         <span /><span>💳 Credit Card Payments</span>
-        <span className="text-right pr-2">Reserved</span>
-        <span className="text-right pr-2">Paid</span>
-        <span className="text-right">Still Owed</span>
+        <span className="text-right pr-2" title="CC spending this month — auto-set-aside for payment">Spent</span>
+        <span className="text-right pr-2">Payments</span>
+        <span className="text-right">Card Balance</span>
         <span />
       </div>
       {groups.flatMap((g) =>

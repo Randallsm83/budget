@@ -48,12 +48,14 @@ export default async function BudgetPage({ params }: Props) {
   const ON_BUDGET_TYPES = ['checking', 'savings', 'cash', 'credit_card']
 
   const budgetAccts = await db
-    .select({ id: accounts.id, type: accounts.type })
+    .select({ id: accounts.id, type: accounts.type, balance: accounts.balance })
     .from(accounts)
     .where(and(eq(accounts.userId, userId), inArray(accounts.type, ON_BUDGET_TYPES)))
 
   const budgetAccountIds = budgetAccts.map((a) => a.id)
   const ccAccountIds = new Set(budgetAccts.filter((a) => a.type === 'credit_card').map((a) => a.id))
+  // Actual card balance (stored as negative milliunits) → amount owed to issuer
+  const ccActualBalance = new Map(budgetAccts.filter((a) => a.type === 'credit_card').map((a) => [a.id, -a.balance]))
 
   // -------------------------------------------------------------------------
   // Fetch all groups + categories
@@ -223,7 +225,11 @@ export default async function BudgetPage({ params }: Props) {
         name: cat.name,
         budgeted: isCC ? (targetCCAutoFund[cat.id] ?? 0) : (targetBudget[cat.id] ?? 0),
         activity: targetActivity[cat.id] ?? 0,
-        balance: balanceMap[cat.id] ?? 0,
+        // For CC Payment rows: use the actual card balance from the accounts table
+        // (transaction-history-based balance is inaccurate due to partial Plaid import windows)
+        balance: isCC && cat.ccAccountId
+          ? (ccActualBalance.get(cat.ccAccountId) ?? 0)
+          : (balanceMap[cat.id] ?? 0),
         isCCPayment: !!cat.ccAccountId,
       }))
       return {

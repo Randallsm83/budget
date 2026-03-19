@@ -40,6 +40,7 @@ export const accounts = pgTable('accounts', {
   balance: integer('balance').notNull().default(0), // milliunits
   clearedBalance: integer('cleared_balance').notNull().default(0), // milliunits
   closed: boolean('closed').notNull().default(false),
+  sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
 })
