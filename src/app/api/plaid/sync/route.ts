@@ -127,28 +127,49 @@ export async function POST(req: NextRequest) {
     await db.delete(transactions).where(eq(transactions.importId, t.transaction_id))
   }
 
-  // Recalculate account balance from all transactions, but only if we
-  // actually have transactions — don't zero-out a Plaid-imported balance
-  const [{ txnCount }] = await db
-    .select({ txnCount: sql<number>`count(*)` })
-    .from(transactions)
-    .where(eq(transactions.accountId, accountId))
+  // Use Plaid's live account balance as the source of truth.
+  // Recomputing from transaction sums is unreliable because Plaid's initial
+  // historical pull is partial — recent payments can make the running sum
+  // flip sign and produce a wrong result (e.g. credit card shows positive).
+  try {
+    const balRes = await plaidClient.accountsGet({ access_token: accessToken })
+    const plaidAcc = plaidAccountId
+      ? balRes.data.accounts.find((a) => a.account_id === plaidAccountId)
+      : balRes.data.accounts[0]
 
-  if (Number(txnCount) > 0) {
-    const [{ total: balance }] = await db
-      .select({ total: sql<number>`coalesce(sum(${transactions.amount}), 0)` })
+    if (plaidAcc) {
+      const current = plaidAcc.balances.current ?? 0
+      // Credit + loan: Plaid positive = amount owed → negate for our convention (negative = debt)
+      const isDebt = plaidAcc.type === 'credit' || plaidAcc.type === 'loan'
+      const balanceMilliunits = isDebt ? -Math.round(current * 1000) : Math.round(current * 1000)
+      await db
+        .update(accounts)
+        .set({ balance: balanceMilliunits, clearedBalance: balanceMilliunits, updatedAt: new Date() })
+        .where(eq(accounts.id, accountId))
+    }
+  } catch {
+    // If the balance call fails, fall back to recomputing from transactions
+    const [{ txnCount }] = await db
+      .select({ txnCount: sql<number>`count(*)` })
       .from(transactions)
       .where(eq(transactions.accountId, accountId))
 
-    const [{ total: clearedBalance }] = await db
-      .select({ total: sql<number>`coalesce(sum(${transactions.amount}), 0)` })
-      .from(transactions)
-      .where(and(eq(transactions.accountId, accountId), eq(transactions.cleared, true)))
+    if (Number(txnCount) > 0) {
+      const [{ total: balance }] = await db
+        .select({ total: sql<number>`coalesce(sum(${transactions.amount}), 0)` })
+        .from(transactions)
+        .where(eq(transactions.accountId, accountId))
 
-    await db
-      .update(accounts)
-      .set({ balance, clearedBalance, updatedAt: new Date() })
-      .where(eq(accounts.id, accountId))
+      const [{ total: clearedBalance }] = await db
+        .select({ total: sql<number>`coalesce(sum(${transactions.amount}), 0)` })
+        .from(transactions)
+        .where(and(eq(transactions.accountId, accountId), eq(transactions.cleared, true)))
+
+      await db
+        .update(accounts)
+        .set({ balance, clearedBalance, updatedAt: new Date() })
+        .where(eq(accounts.id, accountId))
+    }
   }
 
   // Save new cursor and sync timestamp
