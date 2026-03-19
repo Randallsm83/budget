@@ -461,7 +461,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
   const expenseGroups = groups.filter((g) => !g.isIncome)
 
   return (
-    <div className="flex-1 overflow-auto">
+    <div className="flex-1 overflow-x-auto">
       <div className="min-w-[30rem]">
       {/* Column headers */}
       <div className="sticky top-0 z-10 bg-[#1a1b2e] border-b border-[#3a3b58]

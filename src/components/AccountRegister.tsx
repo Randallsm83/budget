@@ -423,11 +423,12 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   }
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full overflow-x-hidden">
       {/* Header */}
       <div className="flex-shrink-0 bg-[#1f2039] border-b border-[#3a3b58] px-4 sm:px-6 py-3
-                      flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-2">
-        <div>
+                      flex flex-wrap sm:flex-nowrap items-start sm:items-center justify-between gap-2
+                      overflow-x-hidden">
+        <div className="min-w-0 flex-1">
           {renamingAccount ? (
             <input
               autoFocus
@@ -449,7 +450,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
               {accountName}
             </h2>
           )}
-          <p className="text-xs text-[#8a8fad] mt-0.5">
+          <p className="text-xs text-[#8a8fad] mt-0.5 truncate">
             {TYPE_LABELS[account.type] ?? account.type}
             {' · Balance: '}
             <span className={account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
@@ -461,7 +462,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             </span>
           </p>
         </div>
-        <div className="flex flex-col items-end gap-1">
+        <div className="flex flex-col items-end gap-1 min-w-0 flex-shrink-0">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             {!isTracking && (
               <button
@@ -530,7 +531,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             </button>
           </div>
           {syncResult && (
-            <span className="text-[10px] text-[#8a8fad]">{syncResult}</span>
+            <span className="text-[10px] text-[#8a8fad] text-right block max-w-[16rem] sm:max-w-xs break-words">{syncResult}</span>
           )}
         </div>
       </div>
