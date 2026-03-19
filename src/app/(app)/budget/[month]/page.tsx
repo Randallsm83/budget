@@ -61,7 +61,13 @@ export default async function BudgetPage({ params }: Props) {
     orderBy: [asc(categoryGroups.sortOrder)],
   })
 
-  const allCategoryIds = groups.flatMap((g) => g.categories.map((c) => c.id))
+  // Set of category IDs that belong to transfer groups (excluded from budget math entirely)
+  const transferCatIds = new Set(
+    groups.filter((g) => g.isTransfer).flatMap((g) => g.categories.map((c) => c.id))
+  )
+  const allCategoryIds = groups
+    .filter((g) => !g.isTransfer)
+    .flatMap((g) => g.categories.map((c) => c.id))
   // Set of category IDs that belong to income groups
   const incomeCatIds = new Set(
     groups.filter((g) => g.isIncome).flatMap((g) => g.categories.map((c) => c.id))
@@ -102,7 +108,8 @@ export default async function BudgetPage({ params }: Props) {
 
   for (const txn of allTxns) {
     const txnMonth = txn.date.substring(0, 7)
-    if (txn.categoryId) {
+    if (txn.categoryId && !transferCatIds.has(txn.categoryId)) {
+      // Non-transfer categorized transaction — affects budget math
       activityMap[txnMonth] ??= {}
       activityMap[txnMonth][txn.categoryId] =
         (activityMap[txnMonth][txn.categoryId] ?? 0) + txn.amount
@@ -110,9 +117,11 @@ export default async function BudgetPage({ params }: Props) {
       if (incomeCatIds.has(txn.categoryId)) {
         incomeMap[txnMonth] = (incomeMap[txnMonth] ?? 0) + txn.amount
       }
-    } else if (txn.amount > 0) {
+    } else if (!txn.categoryId && txn.amount > 0) {
+      // Uncategorized inflow — feeds RTA
       inflowMap[txnMonth] = (inflowMap[txnMonth] ?? 0) + txn.amount
     }
+    // Transfer-categorized transactions: ignored entirely (they cancel out cross-account)
   }
 
   const budgetMap: Record<string, Record<string, number>> = {}
@@ -169,6 +178,7 @@ export default async function BudgetPage({ params }: Props) {
       id: g.id,
       name: g.name,
       isIncome: g.isIncome,
+      isTransfer: g.isTransfer,
       categories: cats,
       totalBudgeted: cats.reduce((s, c) => s + c.budgeted, 0),
       totalActivity: cats.reduce((s, c) => s + c.activity, 0),

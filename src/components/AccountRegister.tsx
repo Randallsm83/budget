@@ -34,7 +34,7 @@ interface Props {
   account: Account
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
-  allCategories: { id: string; name: string; groupName: string; isIncome: boolean }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isTransfer: boolean }[]
   connection: { id: string; lastSyncedAt: string | null } | null
 }
 
@@ -64,7 +64,7 @@ function TransactionRow({
 }: {
   txn: Transaction
   allAccounts: { id: string; name: string }[]
-  allCategories: { id: string; name: string; groupName: string; isIncome: boolean }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isTransfer: boolean }[]
   isTracking: boolean
   onDelete: (id: string) => void
   onEdit: () => void
@@ -113,9 +113,16 @@ function TransactionRow({
           ))}
         </optgroup>
       )}
-      {allCategories.some((c) => !c.isIncome) && (
+      {allCategories.some((c) => !c.isIncome && !c.isTransfer) && (
         <optgroup label="Expenses">
-          {allCategories.filter((c) => !c.isIncome).map((c) => (
+          {allCategories.filter((c) => !c.isIncome && !c.isTransfer).map((c) => (
+            <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+          ))}
+        </optgroup>
+      )}
+      {allCategories.some((c) => c.isTransfer) && (
+        <optgroup label="↔ Transfers">
+          {allCategories.filter((c) => c.isTransfer).map((c) => (
             <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
           ))}
         </optgroup>

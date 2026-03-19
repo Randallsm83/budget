@@ -9,6 +9,8 @@ import {
   renameCategoryGroup,
   deleteCategory,
   deleteCategoryGroup,
+  moveCategory,
+  moveCategoryGroup,
 } from '@/lib/actions'
 import { formatMoney, parseMoney } from '@/lib/budget'
 
@@ -24,6 +26,7 @@ export interface GroupRow {
   id: string
   name: string
   isIncome: boolean
+  isTransfer: boolean
   categories: CategoryRow[]
   totalBudgeted: number
   totalActivity: number
@@ -211,7 +214,21 @@ function AddCategoryRow({ groupId }: { groupId: string }) {
 // ---------------------------------------------------------------------------
 // Group section
 // ---------------------------------------------------------------------------
-function GroupSection({ group, month }: { group: GroupRow; month: string }) {
+function GroupSection({
+  group,
+  month,
+  isFirst,
+  isLast,
+  onMoveUp,
+  onMoveDown,
+}: {
+  group: GroupRow
+  month: string
+  isFirst: boolean
+  isLast: boolean
+  onMoveUp: () => void
+  onMoveDown: () => void
+}) {
   const [renaming, setRenaming] = useState(false)
   const [, startTransition] = useTransition()
   const [catErrors, setCatErrors] = useState<Record<string, string>>({})
@@ -252,10 +269,14 @@ function GroupSection({ group, month }: { group: GroupRow; month: string }) {
     })
   }
 
+  function handleMoveCategory(id: string, direction: 'up' | 'down') {
+    startTransition(() => moveCategory(id, direction))
+  }
+
   return (
     <div>
       {/* Group header */}
-      <div className="grid grid-cols-[1fr_7rem_7rem_7rem_2rem] px-6 py-2
+      <div className="grid grid-cols-[1fr_7rem_7rem_7rem_4rem] px-6 py-2
                       bg-[#252640] border-b border-t border-[#3a3b58] group/grp items-center">
         {renaming ? (
           <InlineRename
@@ -265,45 +286,79 @@ function GroupSection({ group, month }: { group: GroupRow; month: string }) {
             className="text-xs font-bold w-48"
           />
         ) : (
-          <span
-            onDoubleClick={() => setRenaming(true)}
-            title="Double-click to rename"
-            className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider cursor-default select-none"
-          >
-            {group.name}
-            {groupError && (
-              <span className="ml-2 text-[#ce6f8f] normal-case font-normal tracking-normal">
-                {groupError}
-              </span>
-            )}
-          </span>
+          <div className="flex items-center gap-1 min-w-0">
+            <span
+              onDoubleClick={() => setRenaming(true)}
+              title="Double-click to rename"
+              className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider cursor-default select-none"
+            >
+              {group.name}
+              {groupError && (
+                <span className="ml-2 text-[#ce6f8f] normal-case font-normal tracking-normal">
+                  {groupError}
+                </span>
+              )}
+            </span>
+            <button
+              onClick={() => setRenaming(true)}
+              title="Rename group"
+              className="text-[#8a8fad] hover:text-[#b3a1e6] text-xs flex-shrink-0
+                         sm:opacity-0 sm:group-hover/grp:opacity-100 transition-opacity"
+            >
+              ✎
+            </button>
+          </div>
         )}
         <span className="text-right text-xs text-[#8a8fad] tabular-nums pr-2">
           {formatMoney(group.totalBudgeted)}
         </span>
         <Amount value={group.totalActivity} className="text-right text-xs pr-2" />
         <Amount value={group.totalBalance} className="text-right text-xs font-semibold" />
-        <button
-          onClick={handleDeleteGroup}
-          title={group.categories.length > 0 ? 'Remove all categories first' : 'Delete group'}
-          disabled={group.categories.length > 0}
-          className="opacity-0 group-hover/grp:opacity-100 text-xs text-[#3a3b58]
-                     hover:text-[#ce6f8f] transition-all disabled:cursor-not-allowed
-                     disabled:opacity-20 disabled:hover:text-[#3a3b58]"
-        >
-          ✕
-        </button>
+        <div className="flex items-center justify-end gap-0.5
+                        sm:opacity-0 sm:group-hover/grp:opacity-100 transition-opacity">
+          <button
+            onClick={onMoveUp}
+            disabled={isFirst}
+            title="Move group up"
+            className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5
+                       disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ↑
+          </button>
+          <button
+            onClick={onMoveDown}
+            disabled={isLast}
+            title="Move group down"
+            className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5
+                       disabled:opacity-30 disabled:cursor-not-allowed"
+          >
+            ↓
+          </button>
+          <button
+            onClick={handleDeleteGroup}
+            title={group.categories.length > 0 ? 'Remove all categories first' : 'Delete group'}
+            disabled={group.categories.length > 0}
+            className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-0.5
+                       disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[#8a8fad]"
+          >
+            ✕
+          </button>
+        </div>
       </div>
 
       {/* Category rows */}
-      {group.categories.map((cat) => (
+      {group.categories.map((cat, idx) => (
         <CategoryItemRow
           key={cat.id}
           cat={cat}
           month={month}
           error={catErrors[cat.id] ?? ''}
+          isFirst={idx === 0}
+          isLast={idx === group.categories.length - 1}
           onSaveName={(name) => saveCatName(cat.id, name)}
           onDelete={() => handleDeleteCategory(cat.id)}
+          onMoveUp={() => handleMoveCategory(cat.id, 'up')}
+          onMoveDown={() => handleMoveCategory(cat.id, 'down')}
         />
       ))}
 
@@ -317,20 +372,28 @@ function CategoryItemRow({
   cat,
   month,
   error,
+  isFirst,
+  isLast,
   onSaveName,
   onDelete,
+  onMoveUp,
+  onMoveDown,
 }: {
   cat: CategoryRow
   month: string
   error: string
+  isFirst: boolean
+  isLast: boolean
   onSaveName: (name: string) => void
   onDelete: () => void
+  onMoveUp: () => void
+  onMoveDown: () => void
 }) {
   const [renaming, setRenaming] = useState(false)
 
   return (
     <div
-      className="grid grid-cols-[1fr_7rem_7rem_7rem_2rem] px-6 py-1.5
+      className="grid grid-cols-[1fr_7rem_7rem_7rem_4rem] px-6 py-1.5
                  border-b border-[#1f2039] hover:bg-[#1f2039] transition-colors
                  items-center group/cat"
     >
@@ -342,14 +405,24 @@ function CategoryItemRow({
           className="text-sm w-48"
         />
       ) : (
-        <span
-          onDoubleClick={() => setRenaming(true)}
-          title="Double-click to rename"
-          className="text-sm text-[#ecf0f1] cursor-default select-none"
-        >
-          {cat.name}
-          {error && <span className="ml-2 text-xs text-[#ce6f8f]">{error}</span>}
-        </span>
+        <div className="flex items-center gap-1 min-w-0">
+          <span
+            onDoubleClick={() => setRenaming(true)}
+            title="Double-click to rename"
+            className="text-sm text-[#ecf0f1] cursor-default select-none truncate flex-1"
+          >
+            {cat.name}
+            {error && <span className="ml-2 text-xs text-[#ce6f8f]">{error}</span>}
+          </span>
+          <button
+            onClick={() => setRenaming(true)}
+            title="Rename"
+            className="text-[#8a8fad] hover:text-[#b3a1e6] text-xs flex-shrink-0
+                       sm:opacity-0 sm:group-hover/cat:opacity-100 transition-opacity"
+          >
+            ✎
+          </button>
+        </div>
       )}
 
       <div className="flex justify-end pr-2">
@@ -359,14 +432,34 @@ function CategoryItemRow({
       <Amount value={cat.activity} className="text-right text-sm pr-2" />
       <Amount value={cat.balance} className="text-right text-sm font-medium" />
 
-      <button
-        onClick={onDelete}
-        title="Delete category"
-        className="opacity-0 group-hover/cat:opacity-100 text-xs text-[#3a3b58]
-                   hover:text-[#ce6f8f] transition-all"
-      >
-        ✕
-      </button>
+      <div className="flex items-center justify-end gap-0.5
+                      sm:opacity-0 sm:group-hover/cat:opacity-100 transition-opacity">
+        <button
+          onClick={onMoveUp}
+          disabled={isFirst}
+          title="Move up"
+          className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5
+                     disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ↑
+        </button>
+        <button
+          onClick={onMoveDown}
+          disabled={isLast}
+          title="Move down"
+          className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5
+                     disabled:opacity-30 disabled:cursor-not-allowed"
+        >
+          ↓
+        </button>
+        <button
+          onClick={onDelete}
+          title="Delete category"
+          className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-0.5"
+        >
+          ✕
+        </button>
+      </div>
     </div>
   )
 }
@@ -374,10 +467,12 @@ function CategoryItemRow({
 // ---------------------------------------------------------------------------
 // Add group row
 // ---------------------------------------------------------------------------
+type GroupType = 'expense' | 'income' | 'transfer'
+
 function AddGroupRow() {
   const [open, setOpen] = useState(false)
   const [name, setName] = useState('')
-  const [isIncome, setIsIncome] = useState(false)
+  const [groupType, setGroupType] = useState<GroupType>('expense')
   const [isPending, startTransition] = useTransition()
   const ref = useRef<HTMLInputElement>(null)
 
@@ -389,9 +484,9 @@ function AddGroupRow() {
     const trimmed = name.trim()
     if (!trimmed) { setOpen(false); return }
     startTransition(async () => {
-      await addCategoryGroup(trimmed, isIncome)
+      await addCategoryGroup(trimmed, groupType === 'income', groupType === 'transfer')
       setName('')
-      setIsIncome(false)
+      setGroupType('expense')
       setOpen(false)
     })
   }
@@ -410,20 +505,24 @@ function AddGroupRow() {
 
   return (
     <div className="px-6 py-3 border-t border-[#3a3b58] mt-2 space-y-2">
-      {/* Income / Expense toggle */}
+      {/* Expense / Income / Transfer toggle */}
       <div className="flex rounded-lg bg-[#2a2b45] p-0.5 w-fit">
-        {([false, true] as const).map((v) => (
+        {(['expense', 'income', 'transfer'] as const).map((t) => (
           <button
-            key={String(v)}
+            key={t}
             type="button"
-            onClick={() => setIsIncome(v)}
+            onClick={() => setGroupType(t)}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-              isIncome === v
-                ? v ? 'bg-[#5ccc96] text-[#1a1b2e]' : 'bg-[#1f2039] text-[#ecf0f1] shadow'
+              groupType === t
+                ? t === 'income'
+                  ? 'bg-[#5ccc96] text-[#1a1b2e]'
+                  : t === 'transfer'
+                    ? 'bg-[#42b3c2] text-[#1a1b2e]'
+                    : 'bg-[#1f2039] text-[#ecf0f1] shadow'
                 : 'text-[#8a8fad] hover:text-[#ecf0f1]'
             }`}
           >
-            {v ? 'Income' : 'Expense'}
+            {t === 'income' ? 'Income' : t === 'transfer' ? 'Transfer' : 'Expense'}
           </button>
         ))}
       </div>
@@ -435,15 +534,19 @@ function AddGroupRow() {
           onBlur={commit}
           onKeyDown={(e) => {
             if (e.key === 'Enter') commit()
-            if (e.key === 'Escape') { setOpen(false); setName(''); setIsIncome(false) }
+            if (e.key === 'Escape') { setOpen(false); setName(''); setGroupType('expense') }
           }}
-          placeholder={isIncome ? 'e.g. Salary, Freelance…' : 'Group name…'}
+          placeholder={
+            groupType === 'income' ? 'e.g. Salary, Freelance…'
+            : groupType === 'transfer' ? 'e.g. Transfers…'
+            : 'Group name…'
+          }
           disabled={isPending}
           className="flex-1 bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] text-sm rounded
                      px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] disabled:opacity-50"
         />
         <button
-          onClick={() => { setOpen(false); setName(''); setIsIncome(false) }}
+          onClick={() => { setOpen(false); setName(''); setGroupType('expense') }}
           className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1"
         >
           ✕
@@ -457,15 +560,21 @@ function AddGroupRow() {
 // Main table
 // ---------------------------------------------------------------------------
 export function BudgetTable({ month, groups }: { month: string; groups: GroupRow[] }) {
+  const [, startTransition] = useTransition()
   const incomeGroups = groups.filter((g) => g.isIncome)
-  const expenseGroups = groups.filter((g) => !g.isIncome)
+  const expenseGroups = groups.filter((g) => !g.isIncome && !g.isTransfer)
+  const transferGroups = groups.filter((g) => g.isTransfer)
+
+  function handleMoveGroup(id: string, direction: 'up' | 'down') {
+    startTransition(() => moveCategoryGroup(id, direction))
+  }
 
   return (
     <div className="flex-1 overflow-x-auto">
       <div className="min-w-[30rem]">
       {/* Column headers */}
       <div className="sticky top-0 z-10 bg-[#1a1b2e] border-b border-[#3a3b58]
-                      grid grid-cols-[1fr_7rem_7rem_7rem_2rem] px-6 py-2
+                      grid grid-cols-[1fr_7rem_7rem_7rem_4rem] px-6 py-2
                       text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">
         <span>Category</span>
         <span className="text-right pr-2" title="Money you've assigned to this category for the month">Budgeted</span>
@@ -477,7 +586,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
       {/* Income groups */}
       {incomeGroups.length > 0 && (
         <>
-          <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_2rem]
+          <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_4rem]
                           text-[9px] font-bold text-[#5ccc96] uppercase tracking-widest">
             <span>💰 Income</span>
             <span className="text-right pr-2" title="How much income you've budgeted to receive this month">Expected</span>
@@ -485,14 +594,22 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
             <span className="text-right" title="Received minus Expected. Positive = ahead of target.">vs Expected</span>
             <span />
           </div>
-          {incomeGroups.map((group) => (
-            <GroupSection key={group.id} group={group} month={month} />
+          {incomeGroups.map((group, idx) => (
+            <GroupSection
+              key={group.id}
+              group={group}
+              month={month}
+              isFirst={idx === 0}
+              isLast={idx === incomeGroups.length - 1}
+              onMoveUp={() => handleMoveGroup(group.id, 'up')}
+              onMoveDown={() => handleMoveGroup(group.id, 'down')}
+            />
           ))}
         </>
       )}
 
       {/* Expense groups */}
-      {expenseGroups.length === 0 && incomeGroups.length === 0 && (
+      {expenseGroups.length === 0 && incomeGroups.length === 0 && transferGroups.length === 0 && (
         <div className="px-6 py-12 text-center text-[#8a8fad] text-sm">
           No categories yet.{' '}
           <span className="text-[#b3a1e6]">Use &ldquo;+ Add Group&rdquo; below to get started.</span>
@@ -501,7 +618,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
       {expenseGroups.length > 0 && (
         <>
           {incomeGroups.length > 0 && (
-            <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_2rem]
+            <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_4rem]
                             text-[9px] font-bold text-[#8a8fad] uppercase tracking-widest">
               <span>💸 Expenses</span>
               <span className="text-right pr-2" title="Money you've assigned to this category for the month">Budgeted</span>
@@ -510,8 +627,41 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
               <span />
             </div>
           )}
-          {expenseGroups.map((group) => (
-            <GroupSection key={group.id} group={group} month={month} />
+          {expenseGroups.map((group, idx) => (
+            <GroupSection
+              key={group.id}
+              group={group}
+              month={month}
+              isFirst={idx === 0}
+              isLast={idx === expenseGroups.length - 1}
+              onMoveUp={() => handleMoveGroup(group.id, 'up')}
+              onMoveDown={() => handleMoveGroup(group.id, 'down')}
+            />
+          ))}
+        </>
+      )}
+
+      {/* Transfer groups */}
+      {transferGroups.length > 0 && (
+        <>
+          <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_4rem]
+                          text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
+            <span>↔️ Transfers</span>
+            <span className="text-right pr-2">Budgeted</span>
+            <span className="text-right pr-2">Activity</span>
+            <span className="text-right">Balance</span>
+            <span />
+          </div>
+          {transferGroups.map((group, idx) => (
+            <GroupSection
+              key={group.id}
+              group={group}
+              month={month}
+              isFirst={idx === 0}
+              isLast={idx === transferGroups.length - 1}
+              onMoveUp={() => handleMoveGroup(group.id, 'up')}
+              onMoveDown={() => handleMoveGroup(group.id, 'down')}
+            />
           ))}
         </>
       )}

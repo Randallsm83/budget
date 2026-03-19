@@ -52,6 +52,7 @@ export const categoryGroups = pgTable('category_groups', {
     .references(() => users.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
   isIncome: boolean('is_income').notNull().default(false),
+  isTransfer: boolean('is_transfer').notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })

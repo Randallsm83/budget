@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, inArray, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
+import { and, asc, eq, inArray, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
@@ -313,7 +313,7 @@ export async function deleteAccount(id: string) {
 // ---------------------------------------------------------------------------
 // Category groups
 // ---------------------------------------------------------------------------
-export async function addCategoryGroup(name: string, isIncome = false) {
+export async function addCategoryGroup(name: string, isIncome = false, isTransfer = false) {
   const userId = await requireUser()
   if (!name.trim()) throw new Error('Name is required')
 
@@ -326,11 +326,79 @@ export async function addCategoryGroup(name: string, isIncome = false) {
 
   const [group] = await db
     .insert(categoryGroups)
-    .values({ userId, name: name.trim(), isIncome, sortOrder })
+    .values({ userId, name: name.trim(), isIncome, isTransfer, sortOrder })
     .returning()
 
   revalidatePath('/budget')
   return group
+}
+
+export async function moveCategoryGroup(id: string, direction: 'up' | 'down') {
+  const userId = await requireUser()
+
+  const group = await db.query.categoryGroups.findFirst({
+    where: and(eq(categoryGroups.id, id), eq(categoryGroups.userId, userId)),
+  })
+  if (!group) return
+
+  // Get all groups of the same type, ordered by sortOrder
+  const sameType = await db
+    .select({ id: categoryGroups.id, sortOrder: categoryGroups.sortOrder })
+    .from(categoryGroups)
+    .where(and(
+      eq(categoryGroups.userId, userId),
+      eq(categoryGroups.isIncome, group.isIncome),
+      eq(categoryGroups.isTransfer, group.isTransfer),
+    ))
+    .orderBy(asc(categoryGroups.sortOrder))
+
+  const idx = sameType.findIndex((g) => g.id === id)
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= sameType.length) return
+
+  // Swap in array, then reassign all sortOrders (normalizes duplicates too)
+  ;[sameType[idx], sameType[targetIdx]] = [sameType[targetIdx], sameType[idx]]
+  await Promise.all(
+    sameType.map((g, i) =>
+      db.update(categoryGroups)
+        .set({ sortOrder: i })
+        .where(eq(categoryGroups.id, g.id))
+    )
+  )
+
+  revalidatePath('/budget')
+}
+
+export async function moveCategory(id: string, direction: 'up' | 'down') {
+  const userId = await requireUser()
+
+  const cat = await db.query.categories.findFirst({
+    where: and(eq(categories.id, id), eq(categories.userId, userId)),
+  })
+  if (!cat) return
+
+  // Get all categories in the same group, ordered by sortOrder
+  const siblings = await db
+    .select({ id: categories.id, sortOrder: categories.sortOrder })
+    .from(categories)
+    .where(and(eq(categories.groupId, cat.groupId), eq(categories.userId, userId)))
+    .orderBy(asc(categories.sortOrder))
+
+  const idx = siblings.findIndex((c) => c.id === id)
+  const targetIdx = direction === 'up' ? idx - 1 : idx + 1
+  if (targetIdx < 0 || targetIdx >= siblings.length) return
+
+  // Swap in array, then reassign all sortOrders (normalizes duplicates too)
+  ;[siblings[idx], siblings[targetIdx]] = [siblings[targetIdx], siblings[idx]]
+  await Promise.all(
+    siblings.map((c, i) =>
+      db.update(categories)
+        .set({ sortOrder: i })
+        .where(eq(categories.id, c.id))
+    )
+  )
+
+  revalidatePath('/budget')
 }
 
 export async function renameCategoryGroup(id: string, name: string) {
