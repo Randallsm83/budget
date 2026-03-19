@@ -401,6 +401,30 @@ export async function moveCategory(id: string, direction: 'up' | 'down') {
   revalidatePath('/budget')
 }
 
+export async function reorderGroups(ids: string[]) {
+  const userId = await requireUser()
+  await Promise.all(
+    ids.map((id, i) =>
+      db.update(categoryGroups)
+        .set({ sortOrder: i })
+        .where(and(eq(categoryGroups.id, id), eq(categoryGroups.userId, userId)))
+    )
+  )
+  revalidatePath('/budget')
+}
+
+export async function reorderCategories(ids: string[]) {
+  const userId = await requireUser()
+  await Promise.all(
+    ids.map((id, i) =>
+      db.update(categories)
+        .set({ sortOrder: i })
+        .where(and(eq(categories.id, id), eq(categories.userId, userId)))
+    )
+  )
+  revalidatePath('/budget')
+}
+
 export async function renameCategoryGroup(id: string, name: string) {
   const userId = await requireUser()
   if (!name.trim()) throw new Error('Name is required')
