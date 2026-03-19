@@ -468,9 +468,9 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
                       grid grid-cols-[1fr_7rem_7rem_7rem_2rem] px-6 py-2
                       text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">
         <span>Category</span>
-        <span className="text-right pr-2">Budgeted</span>
-        <span className="text-right pr-2">Activity</span>
-        <span className="text-right">Balance</span>
+        <span className="text-right pr-2" title="Money you've assigned to this category for the month">Budgeted</span>
+        <span className="text-right pr-2" title="Actual spending this month (negative = outflow)">Activity</span>
+        <span className="text-right" title="Budgeted + Activity. Negative means overspent.">Balance</span>
         <span />
       </div>
 
@@ -480,9 +480,9 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
           <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_2rem]
                           text-[9px] font-bold text-[#5ccc96] uppercase tracking-widest">
             <span>💰 Income</span>
-            <span className="text-right pr-2">Expected</span>
-            <span className="text-right pr-2">Received</span>
-            <span className="text-right">vs Expected</span>
+            <span className="text-right pr-2" title="How much income you've budgeted to receive this month">Expected</span>
+            <span className="text-right pr-2" title="Actual income received this month">Received</span>
+            <span className="text-right" title="Received minus Expected. Positive = ahead of target.">vs Expected</span>
             <span />
           </div>
           {incomeGroups.map((group) => (
@@ -504,9 +504,9 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
             <div className="px-6 py-1.5 bg-[#1a1b2e] border-b border-[#3a3b58] grid grid-cols-[1fr_7rem_7rem_7rem_2rem]
                             text-[9px] font-bold text-[#8a8fad] uppercase tracking-widest">
               <span>💸 Expenses</span>
-              <span className="text-right pr-2">Budgeted</span>
-              <span className="text-right pr-2">Activity</span>
-              <span className="text-right">Balance</span>
+              <span className="text-right pr-2" title="Money you've assigned to this category for the month">Budgeted</span>
+              <span className="text-right pr-2" title="Actual spending this month (negative = outflow)">Activity</span>
+              <span className="text-right" title="Budgeted + Activity. Negative means overspent.">Balance</span>
               <span />
             </div>
           )}

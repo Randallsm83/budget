@@ -1,7 +1,7 @@
 'use server'
 
 import { revalidatePath } from 'next/cache'
-import { and, eq, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
+import { and, eq, inArray, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
@@ -577,6 +577,50 @@ export async function applyPayeeRules(): Promise<{ updated: number; scanned: num
   }
 
   return { updated, scanned: uncategorized.length, rules: freshMap.size }
+}
+
+// ---------------------------------------------------------------------------
+// Recategorize all transactions for a payee
+// ---------------------------------------------------------------------------
+/**
+ * Updates the category on EVERY transaction whose normalized payee matches
+ * the given payee string.  Used for the "Apply to all" prompt.
+ */
+export async function recategorizePayee(
+  payee: string,
+  categoryId: string | null,
+): Promise<{ updated: number }> {
+  const userId = await requireUser()
+  const key = normalizePayee(payee)
+  if (!key) return { updated: 0 }
+
+  // Persist / update the payee rule
+  await learnPayeeRule(userId, payee, categoryId)
+
+  // Fetch all transactions for this user and filter by normalized payee in JS
+  // (normalizePayee is a JS function so we can't push the predicate to SQL)
+  const allTxns = await db
+    .select({ id: transactions.id, accountId: transactions.accountId, date: transactions.date, payee: transactions.payee })
+    .from(transactions)
+    .where(eq(transactions.userId, userId))
+
+  const matching = allTxns.filter(
+    (t) => t.payee && normalizePayee(t.payee) === key,
+  )
+  if (matching.length === 0) return { updated: 0 }
+
+  await db
+    .update(transactions)
+    .set({ categoryId, updatedAt: new Date() })
+    .where(inArray(transactions.id, matching.map((t) => t.id)))
+
+  const affectedAccounts = new Set(matching.map((t) => t.accountId))
+  const affectedMonths = new Set(matching.map((t) => t.date.substring(0, 7)))
+  for (const accountId of affectedAccounts) revalidatePath(`/accounts/${accountId}`)
+  for (const month of affectedMonths) revalidatePath(`/budget/${month}`)
+  revalidatePath('/accounts')
+
+  return { updated: matching.length }
 }
 
 // ---------------------------------------------------------------------------

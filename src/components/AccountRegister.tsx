@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
-import { applyPayeeRules, deleteTransaction, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
@@ -59,6 +59,7 @@ function TransactionRow({
   isTracking,
   onDelete,
   onEdit,
+  onCategoryChanged,
 }: {
   txn: Transaction
   allAccounts: { id: string; name: string }[]
@@ -66,6 +67,7 @@ function TransactionRow({
   isTracking: boolean
   onDelete: (id: string) => void
   onEdit: () => void
+  onCategoryChanged?: (payee: string, catId: string | null, catName: string | null) => void
 }) {
   const router = useRouter()
   const [isPending, startTransition] = useTransition()
@@ -83,8 +85,10 @@ function TransactionRow({
 
   function handleCategoryChange(e: React.ChangeEvent<HTMLSelectElement>) {
     const catId = e.target.value || null
+    const catName = catId ? (allCategories.find((c) => c.id === catId)?.name ?? null) : null
     setLocalCatId(catId)
     setEditingCat(false)
+    if (txn.payee && catId) onCategoryChanged?.(txn.payee, catId, catName)
     startTransition(async () => {
       await updateTransactionCategory(txn.id, catId)
       router.refresh()
@@ -294,6 +298,8 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [applyingRules, setApplyingRules] = useState(false)
+  const [pendingRecat, setPendingRecat] = useState<{ payee: string; catId: string | null; catName: string | null } | null>(null)
+  const [recatPending, setRecatPending] = useState(false)
   const [, startTransition] = useTransition()
 
   async function handleApplyRules() {
@@ -331,11 +337,30 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     setSyncing(false)
     if (res.ok) {
       let msg = `+${data.added} added, ${data.modified} updated, ${data.removed} removed`
-      if (data.firstSync) msg += ' · Plaid is loading older history — sync again in a few minutes'
+      if (data.firstSync) {
+        msg += ' · Loading history — auto-syncing in 30s'
+        setTimeout(handleSync, 30_000)
+      }
       setSyncResult(msg)
       router.refresh()
     } else {
       setSyncResult(`Sync failed: ${data.error ?? 'unknown error'}`)
+    }
+  }
+
+  async function handleRecategorizeAll() {
+    if (!pendingRecat) return
+    setRecatPending(true)
+    try {
+      const result = await recategorizePayee(pendingRecat.payee, pendingRecat.catId)
+      setSyncResult(`${result.updated} transaction${result.updated !== 1 ? 's' : ''} updated for "${pendingRecat.payee}"`)
+      router.refresh()
+    } catch (err) {
+      console.error('recategorizePayee error:', err)
+      setSyncResult('Error applying to all — check console')
+    } finally {
+      setRecatPending(false)
+      setPendingRecat(null)
     }
   }
 
@@ -452,6 +477,36 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         </div>
       </div>
 
+      {/* Apply-to-all banner */}
+      {pendingRecat && (
+        <div className="flex-shrink-0 bg-[#2a2b45] border-b border-[#b3a1e6] px-4 py-2
+                        flex items-center justify-between gap-4">
+          <span className="text-xs text-[#ecf0f1] truncate">
+            Apply{' '}
+            <strong className="text-[#b3a1e6]">{pendingRecat.catName ?? 'Inflow'}</strong>
+            {' '}to all{' '}
+            <strong className="text-[#ecf0f1]">{pendingRecat.payee}</strong>
+            {' '}transactions?
+          </span>
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <button
+              onClick={handleRecategorizeAll}
+              disabled={recatPending}
+              className="text-xs bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold
+                         px-2.5 py-1 rounded transition-colors disabled:opacity-50"
+            >
+              {recatPending ? 'Applying…' : 'Apply to all'}
+            </button>
+            <button
+              onClick={() => setPendingRecat(null)}
+              className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1"
+            >
+              Skip
+            </button>
+          </div>
+        </div>
+      )}
+
       {/* Column headers — desktop only */}
       <div className={`flex-shrink-0 hidden sm:grid gap-2 px-4 py-2
                       bg-[#1a1b2e] border-b border-[#3a3b58]
@@ -483,9 +538,12 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             txn={txn}
             allAccounts={allAccounts}
             allCategories={allCategories}
-            isTracking={isTracking}
+          isTracking={isTracking}
             onDelete={handleDelete}
             onEdit={() => setEditingTxn(txn)}
+            onCategoryChanged={(payee, catId, catName) => {
+              if (payee && catId) setPendingRecat({ payee, catId, catName })
+            }}
           />
         ))}
       </div>
