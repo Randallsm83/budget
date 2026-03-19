@@ -55,7 +55,13 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const errData = (err as { response?: { data?: { error_code?: string } } })?.response?.data
     if (errData?.error_code === 'ITEM_LOGIN_REQUIRED') {
-      // Bank connection expired — client must re-link via Plaid update mode
+      // Persist the flag so the sidebar and account page immediately show the relink entry point
+      if (connection.plaidItemId) {
+        await db
+          .update(importConnections)
+          .set({ requiresRelink: true })
+          .where(eq(importConnections.plaidItemId, connection.plaidItemId))
+      }
       return NextResponse.json({ requiresRelink: true })
     }
     const msg = errData ? JSON.stringify(errData) : (err instanceof Error ? err.message : String(err))
@@ -102,15 +108,17 @@ export async function POST(req: NextRequest) {
                 t.personal_finance_category?.detailed,
               )
             ?? null
+          const isTransfer = !!storedPayee && /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i.test(storedPayee)
           return {
             userId,
             accountId,
             date: t.date,
             payee: storedPayee,
-            categoryId,
+            categoryId: isTransfer ? null : categoryId,
             // Plaid: positive = outflow (debit), our schema: negative = outflow
             amount: -Math.round(t.amount * 1000),
             cleared: true,
+            isTransfer,
             importId: t.transaction_id,
           }
         }),
@@ -119,12 +127,13 @@ export async function POST(req: NextRequest) {
   }
 
   // Update modified transactions
+  // Prefer merchant_name (cleaned) over raw name, same convention as added
   for (const t of modified) {
     await db
       .update(transactions)
       .set({
         date: t.date,
-        payee: t.name,
+        payee: t.merchant_name ?? t.name,
         amount: -Math.round(t.amount * 1000),
         cleared: true,
         updatedAt: new Date(),
@@ -182,7 +191,14 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  // Save new cursor and sync timestamp
+  // Clear requiresRelink for all accounts on this Item (the login is now working)
+  if (connection.plaidItemId) {
+    await db
+      .update(importConnections)
+      .set({ requiresRelink: false })
+      .where(eq(importConnections.plaidItemId, connection.plaidItemId))
+  }
+  // Save new cursor and sync timestamp for this specific connection
   await db
     .update(importConnections)
     .set({ cursor, lastSyncedAt: new Date() })

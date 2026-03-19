@@ -127,6 +127,7 @@ export default async function BudgetPage({ params }: Props) {
   const incomeMap: Record<string, number> = {}
 
   for (const txn of allTxns) {
+    if (txn.isTransfer) continue // inter-account transfers are invisible to the budget
     const txnMonth = txn.date.substring(0, 7)
 
     if (txn.categoryId) {

@@ -5,6 +5,7 @@ import { plaidClient } from '@/lib/plaid'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { accounts, importConnections } from '@/db/schema'
+import { syncInvestmentHoldings, syncLiabilityDetails } from '@/lib/plaid-sync'
 
 function mapType(account: AccountBase): string {
   if (account.type === 'credit') return 'credit_card'
@@ -65,6 +66,22 @@ export async function POST(req: NextRequest) {
         plaidAccountId: pa.account_id,
         accessTokenEncrypted,
       })
+
+      // Bootstrap product-specific data on first link (best-effort)
+      if (type === 'investment') {
+        try {
+          await syncInvestmentHoldings(userId, newAccount.id, pa.account_id, accessToken)
+        } catch (err) {
+          console.warn('[create-accounts] investments bootstrap failed:', err)
+        }
+      }
+      if (type === 'loan' || type === 'credit_card') {
+        try {
+          await syncLiabilityDetails(userId, newAccount.id, pa.account_id, accessToken)
+        } catch (err) {
+          console.warn('[create-accounts] liabilities bootstrap failed:', err)
+        }
+      }
 
       created.push(newAccount)
     }

@@ -13,6 +13,7 @@ interface Account {
   type: string
   balance: number
   closed: boolean
+  requiresRelink?: boolean
 }
 
 // ── Grouping constants (mirrors sidebar) ────────────────────────────────────────
@@ -58,7 +59,9 @@ function AccountRow({
     <div className={`flex items-center justify-between rounded-lg px-4 py-2.5 group transition-all
                      ${isClosed
                        ? 'bg-[#1a1b2e] border border-[#2a2b45] opacity-60 hover:opacity-80'
-                       : 'bg-[#1f2039] border border-[#2a2b45] hover:border-[#3a3b58] hover:bg-[#252640]'}`}>
+                       : account.requiresRelink
+                         ? 'bg-[#1f2039] border border-[#e39400]/40 hover:border-[#e39400] hover:bg-[#252640]'
+                         : 'bg-[#1f2039] border border-[#2a2b45] hover:border-[#3a3b58] hover:bg-[#252640]'}`}>
       <Link href={`/accounts/${account.id}`} className="flex items-center gap-2.5 flex-1 min-w-0">
         <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
         <div className="min-w-0">
@@ -66,6 +69,9 @@ function AccountRow({
           <p className="text-[11px] text-[#5a5b78] mt-0.5">
             {TYPE_LABELS[account.type] ?? account.type}
             {isClosed && ' · Closed'}
+            {account.requiresRelink && !isClosed && (
+              <span className="ml-2 text-[#e39400] font-medium">⚠️ Bank connection needs attention</span>
+            )}
             {error && <span className="ml-2 text-[#ce6f8f]">{error}</span>}
           </p>
         </div>

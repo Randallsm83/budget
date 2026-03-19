@@ -290,6 +290,24 @@ export async function updateTransactionCategory(id: string, categoryId: string |
   revalidatePath(`/accounts/${txn.accountId}`)
 }
 
+export async function toggleTransfer(id: string) {
+  const userId = await requireUser()
+
+  const txn = await db.query.transactions.findFirst({
+    where: and(eq(transactions.id, id), eq(transactions.userId, userId)),
+  })
+  if (!txn) throw new Error('Transaction not found')
+
+  await db
+    .update(transactions)
+    .set({ isTransfer: !txn.isTransfer, categoryId: !txn.isTransfer ? null : txn.categoryId })
+    .where(eq(transactions.id, id))
+
+  const month = txn.date.substring(0, 7)
+  revalidatePath(`/budget/${month}`)
+  revalidatePath(`/accounts/${txn.accountId}`)
+}
+
 export async function toggleCleared(id: string) {
   const userId = await requireUser()
 

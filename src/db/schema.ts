@@ -118,6 +118,7 @@ export const transactions = pgTable('transactions', {
   memo: text('memo'),
   cleared: boolean('cleared').notNull().default(false),
   reconciled: boolean('reconciled').notNull().default(false),
+  isTransfer: boolean('is_transfer').notNull().default(false),
   importId: text('import_id').unique(), // dedup key for Plaid / CSV import
   createdAt: timestamp('created_at').notNull().defaultNow(),
   updatedAt: timestamp('updated_at').notNull().defaultNow(),
@@ -157,6 +158,9 @@ export const importConnections = pgTable('import_connections', {
   accessTokenEncrypted: text('access_token_encrypted'),
   cursor: text('cursor'), // Plaid sync cursor
   lastSyncedAt: timestamp('last_synced_at'),
+  // Set true by webhook (PENDING_DISCONNECT, PENDING_EXPIRATION, ITEM_LOGIN_REQUIRED);
+  // cleared to false after a successful sync.
+  requiresRelink: boolean('requires_relink').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 

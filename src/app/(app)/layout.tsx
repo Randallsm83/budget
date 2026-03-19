@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { eq, asc, and } from 'drizzle-orm'
 import { db } from '@/db'
-import { accounts } from '@/db/schema'
+import { accounts, importConnections } from '@/db/schema'
 import { NavLink } from '@/components/NavLink'
 import { SignOutButton } from '@/components/SignOutButton'
 import { AppShell } from '@/components/AppShell'
@@ -34,6 +34,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .from(accounts)
     .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
     .orderBy(asc(accounts.createdAt))
+
+  // Build a set of account IDs whose bank connection needs re-authentication
+  const relinkRows = await db
+    .select({ accountId: importConnections.accountId })
+    .from(importConnections)
+    .where(and(eq(importConnections.userId, session.user.id), eq(importConnections.requiresRelink, true)))
+  const relinkAccountIds = new Set(relinkRows.map((r) => r.accountId).filter((id): id is string => id !== null))
 
   const cashAccounts = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type) && !INVESTMENT_TYPES.has(a.type) && !PROPERTY_TYPES.has(a.type))
   const investmentAccounts = userAccounts.filter((a) => INVESTMENT_TYPES.has(a.type))
@@ -79,6 +86,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
                   <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
+                  {relinkAccountIds.has(account.id) && (
+                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
+                  )}
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#5ccc96]">{formatMoney(account.balance)}</span>
                 </NavLink>
               ))}
@@ -96,6 +106,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
                   <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
+                  {relinkAccountIds.has(account.id) && (
+                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
+                  )}
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#f2ce00]">{formatMoney(account.balance)}</span>
                 </NavLink>
               ))}
@@ -113,6 +126,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
                   <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
+                  {relinkAccountIds.has(account.id) && (
+                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
+                  )}
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#00a3cc]">{formatMoney(account.balance)}</span>
                 </NavLink>
               ))}
@@ -130,6 +146,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
                   <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
+                  {relinkAccountIds.has(account.id) && (
+                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
+                  )}
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#ce6f8f]">{formatMoney(account.balance)}</span>
                 </NavLink>
               ))}

@@ -1,6 +1,6 @@
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { accounts, transactions, categories, categoryGroups, importConnections } from '@/db/schema'
+import { accounts, transactions, categories, categoryGroups, importConnections, investmentHoldings, liabilityDetails } from '@/db/schema'
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { AccountRegister } from '@/components/AccountRegister'
@@ -27,6 +27,7 @@ export default async function AccountRegisterPage({ params }: Props) {
       amount: transactions.amount,
       cleared: transactions.cleared,
       reconciled: transactions.reconciled,
+      isTransfer: transactions.isTransfer,
       memo: transactions.memo,
       categoryId: transactions.categoryId,
       categoryName: categories.name,
@@ -52,6 +53,22 @@ export default async function AccountRegisterPage({ params }: Props) {
     ),
   })
 
+  // Investment holdings (investment accounts only)
+  const holdings = account.type === 'investment'
+    ? await db
+        .select()
+        .from(investmentHoldings)
+        .where(eq(investmentHoldings.accountId, accountId))
+        .orderBy(desc(investmentHoldings.institutionValue))
+    : []
+
+  // Liability details (loan / credit_card accounts only)
+  const liability = (account.type === 'loan' || account.type === 'credit_card')
+    ? await db.query.liabilityDetails.findFirst({
+        where: eq(liabilityDetails.accountId, accountId),
+      })
+    : null
+
   // All user categories (for the transaction modal)
   const allCats = await db
     .select({
@@ -69,7 +86,7 @@ export default async function AccountRegisterPage({ params }: Props) {
   return (
     <AccountRegister
       account={{ id: account.id, name: account.name, type: account.type, balance: account.balance, clearedBalance: account.clearedBalance }}
-      connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null } : null}
+      connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null, requiresRelink: connection.requiresRelink } : null}
       transactions={txns.map((t) => ({
         id: t.id,
         accountId: account.id,
@@ -78,6 +95,7 @@ export default async function AccountRegisterPage({ params }: Props) {
         amount: t.amount,
         cleared: t.cleared,
         reconciled: t.reconciled,
+        isTransfer: t.isTransfer,
         memo: t.memo ?? '',
         categoryId: t.categoryId ?? null,
         categoryName: t.categoryName
@@ -92,6 +110,25 @@ export default async function AccountRegisterPage({ params }: Props) {
         isIncome: c.isIncome ?? false,
         isCCPayment: !!c.ccAccountId,
       }))}
+      holdings={holdings.map((h) => ({
+        id: h.id,
+        plaidSecurityId: h.plaidSecurityId,
+        name: h.name,
+        tickerSymbol: h.tickerSymbol ?? null,
+        securityType: h.securityType ?? null,
+        quantity: h.quantity,
+        institutionPrice: h.institutionPrice,
+        institutionValue: h.institutionValue,
+        costBasis: h.costBasis ?? null,
+        isoCurrencyCode: h.isoCurrencyCode ?? null,
+        updatedAt: h.updatedAt.toISOString(),
+      }))}
+      liabilityDetails={liability ? {
+        id: liability.id,
+        liabilityType: liability.liabilityType,
+        details: liability.details as Record<string, unknown>,
+        syncedAt: liability.syncedAt.toISOString(),
+      } : null}
     />
   )
 }

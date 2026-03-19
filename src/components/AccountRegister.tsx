@@ -6,7 +6,7 @@ import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
 import { PlaidRelink } from './PlaidRelink'
-import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
 
@@ -18,6 +18,7 @@ interface Transaction {
   amount: number
   cleared: boolean
   reconciled: boolean
+  isTransfer: boolean
   memo: string
   categoryId: string | null
   categoryName: string | null
@@ -31,12 +32,254 @@ interface Account {
   clearedBalance: number
 }
 
+interface InvestmentHolding {
+  id: string
+  plaidSecurityId: string
+  name: string
+  tickerSymbol: string | null
+  securityType: string | null
+  quantity: number
+  institutionPrice: number
+  institutionValue: number
+  costBasis: number | null
+  isoCurrencyCode: string | null
+  updatedAt: string
+}
+
+interface LiabilityDetail {
+  id: string
+  liabilityType: string
+  details: Record<string, unknown>
+  syncedAt: string
+}
+
 interface Props {
   account: Account
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
   allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isCCPayment: boolean }[]
+  connection: { id: string; lastSyncedAt: string | null; requiresRelink: boolean } | null
+  holdings?: InvestmentHolding[]
+  liabilityDetails?: LiabilityDetail | null
+}
+
+function HoldingsPanel({
+  holdings,
+  accountId,
+  connection,
+  onSynced,
+}: {
+  holdings: InvestmentHolding[]
+  accountId: string
   connection: { id: string; lastSyncedAt: string | null } | null
+  onSynced: (msg: string) => void
+}) {
+  const router = useRouter()
+  const [syncing, setSyncing] = useState(false)
+
+  async function handleSync() {
+    setSyncing(true)
+    const res = await fetch('/api/plaid/investments/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId }),
+    })
+    const data = await res.json()
+    setSyncing(false)
+    if (res.ok) {
+      onSynced(`Synced ${data.synced} holding${data.synced !== 1 ? 's' : ''}`)
+      router.refresh()
+    } else {
+      onSynced(`Holdings sync failed: ${data.error ?? 'unknown error'}`)
+    }
+  }
+
+  if (!connection && holdings.length === 0) return null
+
+  return (
+    <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
+      <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
+        <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">Holdings</span>
+        {connection && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                       text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {syncing ? 'Syncing…' : '↻ Sync Holdings'}
+          </button>
+        )}
+      </div>
+      {holdings.length > 0 ? (
+        <div className="overflow-x-auto">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="text-[#8a8fad] uppercase tracking-wider border-b border-[#3a3b58]">
+                <th className="px-4 sm:px-6 py-1.5 text-left font-semibold">Ticker</th>
+                <th className="px-2 py-1.5 text-left font-semibold hidden sm:table-cell">Name</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Shares</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Price</th>
+                <th className="px-2 py-1.5 text-right font-semibold">Value</th>
+                <th className="px-2 py-1.5 text-right font-semibold hidden sm:table-cell">Cost Basis</th>
+                <th className="px-4 sm:px-6 py-1.5 text-right font-semibold hidden sm:table-cell">Gain / Loss</th>
+              </tr>
+            </thead>
+            <tbody>
+              {holdings.map((h) => {
+                const gain = h.costBasis !== null ? h.institutionValue - h.costBasis : null
+                const gainPct = h.costBasis ? ((gain! / h.costBasis) * 100).toFixed(1) : null
+                const currency = h.isoCurrencyCode ?? 'USD'
+                const fmt = new Intl.NumberFormat('en-US', { style: 'currency', currency, minimumFractionDigits: 2 })
+                return (
+                  <tr key={h.id} className="border-b border-[#1f2039] hover:bg-[#1f2039] transition-colors">
+                    <td className="px-4 sm:px-6 py-2 font-mono text-[#b3a1e6]">{h.tickerSymbol ?? '—'}</td>
+                    <td className="px-2 py-2 text-[#ecf0f1] truncate max-w-[12rem] hidden sm:table-cell">{h.name}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-[#ecf0f1]">{h.quantity.toFixed(4)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-[#ecf0f1]">{fmt.format(h.institutionPrice)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums font-medium text-[#5ccc96]">{fmt.format(h.institutionValue)}</td>
+                    <td className="px-2 py-2 text-right tabular-nums text-[#8a8fad] hidden sm:table-cell">
+                      {h.costBasis !== null ? fmt.format(h.costBasis) : '—'}
+                    </td>
+                    <td className={`px-4 sm:px-6 py-2 text-right tabular-nums hidden sm:table-cell ${
+                      gain === null ? 'text-[#8a8fad]' : gain >= 0 ? 'text-[#5ccc96]' : 'text-[#ce6f8f]'
+                    }`}>
+                      {gain !== null
+                        ? `${gain >= 0 ? '+' : ''}${fmt.format(gain)}${gainPct ? ` (${gain >= 0 ? '+' : ''}${gainPct}%)` : ''}`
+                        : '—'}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <p className="px-4 sm:px-6 pb-3 text-xs text-[#8a8fad]">
+          No holdings data yet.{connection ? ' Click \u201c\u21bb Sync Holdings\u201d to load.' : ''}
+        </p>
+      )}
+    </div>
+  )
+}
+
+function LiabilityPanel({
+  liability,
+  accountId,
+  connection,
+  onSynced,
+}: {
+  liability: LiabilityDetail | null | undefined
+  accountId: string
+  connection: { id: string; lastSyncedAt: string | null } | null
+  onSynced: (msg: string) => void
+}) {
+  const router = useRouter()
+  const [syncing, setSyncing] = useState(false)
+
+  async function handleSync() {
+    setSyncing(true)
+    const res = await fetch('/api/plaid/liabilities/sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId }),
+    })
+    const data = await res.json()
+    setSyncing(false)
+    if (res.ok && data.synced) {
+      onSynced('Liability details synced')
+      router.refresh()
+    } else if (res.ok) {
+      onSynced('No liability data found for this account')
+    } else {
+      onSynced(`Details sync failed: ${data.error ?? 'unknown error'}`)
+    }
+  }
+
+  if (!connection && !liability) return null
+
+  const d = liability?.details
+  const type = liability?.liabilityType
+
+  const fmtAmt = (v: unknown): string | null =>
+    typeof v === 'number' ? new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' }).format(v) : null
+
+  let fields: { label: string; value: string | null }[] = []
+  if (type === 'credit' && d) {
+    const cd = d as Record<string, unknown>
+    const aprs = cd.aprs as { apr_percentage: number; apr_type: string }[] | undefined
+    const purchaseApr = aprs?.find((a) => a.apr_type === 'purchase_apr')
+    fields = [
+      { label: 'Purchase APR', value: purchaseApr ? `${purchaseApr.apr_percentage}%` : null },
+      { label: 'Min Payment', value: fmtAmt(cd.minimum_payment_amount) },
+      { label: 'Next Due', value: typeof cd.next_payment_due_date === 'string' ? cd.next_payment_due_date : null },
+      { label: 'Last Statement', value: fmtAmt(cd.last_statement_balance) },
+    ]
+  } else if (type === 'student' && d) {
+    const sd = d as Record<string, unknown>
+    const plan = sd.repayment_plan as { type?: string } | undefined
+    fields = [
+      { label: 'Interest Rate', value: typeof sd.interest_rate_percentage === 'number' ? `${sd.interest_rate_percentage}%` : null },
+      { label: 'Min Payment', value: fmtAmt(sd.minimum_payment_amount) },
+      { label: 'Next Due', value: typeof sd.next_payment_due_date === 'string' ? sd.next_payment_due_date : null },
+      { label: 'Payoff Date', value: typeof sd.expected_payoff_date === 'string' ? sd.expected_payoff_date : null },
+      { label: 'Repayment Plan', value: plan?.type ?? null },
+    ]
+  } else if (type === 'mortgage' && d) {
+    const md = d as Record<string, unknown>
+    const rate = md.interest_rate as { percentage?: number } | undefined
+    const addr = md.property_address as { street?: string; city?: string; state?: string } | undefined
+    fields = [
+      { label: 'Interest Rate', value: typeof rate?.percentage === 'number' ? `${rate.percentage}%` : null },
+      { label: 'Last Payment', value: fmtAmt(md.last_payment_amount) },
+      { label: 'Maturity Date', value: typeof md.maturity_date === 'string' ? md.maturity_date : null },
+      { label: 'Property', value: addr ? [addr.street, addr.city, addr.state].filter(Boolean).join(', ') : null },
+    ]
+  }
+
+  const validFields = fields.filter((f) => f.value !== null)
+  const panelLabel =
+    type === 'credit' ? 'Credit Card Details'
+    : type === 'student' ? 'Student Loan Details'
+    : type === 'mortgage' ? 'Mortgage Details'
+    : 'Liability Details'
+
+  return (
+    <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
+      <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
+        <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">{panelLabel}</span>
+        {connection && (
+          <button
+            onClick={handleSync}
+            disabled={syncing}
+            className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                       text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+          >
+            {syncing ? 'Syncing…' : '↻ Sync Details'}
+          </button>
+        )}
+      </div>
+      {validFields.length > 0 ? (
+        <div className="px-4 sm:px-6 pb-3 flex flex-wrap gap-x-6 gap-y-2">
+          {validFields.map(({ label, value }) => (
+            <div key={label}>
+              <p className="text-[10px] text-[#8a8fad] uppercase tracking-wider">{label}</p>
+              <p className="text-sm text-[#ecf0f1] tabular-nums">{value}</p>
+            </div>
+          ))}
+          {liability?.syncedAt && (
+            <div className="w-full text-[10px] text-[#5a5b78] mt-1">
+              Synced {new Date(liability.syncedAt).toLocaleDateString()}
+            </div>
+          )}
+        </div>
+      ) : (
+        <p className="px-4 sm:px-6 pb-3 text-xs text-[#8a8fad]">
+          No liability details yet.{connection ? ' Click \u201c\u21bb Sync Details\u201d to load.' : ''}
+        </p>
+      )}
+    </div>
+  )
 }
 
 const TYPE_LABELS: Record<string, string> = {
@@ -53,6 +296,8 @@ const TYPE_LABELS: Record<string, string> = {
 
 // Tracking (off-budget) account types — no categories, no Plaid sync, no CSV
 const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'loan', 'other'])
+
+const TRANSFER_PAYEE_RE = /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i
 
 function TransactionRow({
   txn,
@@ -74,10 +319,21 @@ function TransactionRow({
   const [confirming, setConfirming] = useState(false)
   const [editingCat, setEditingCat] = useState(false)
   const [localCatId, setLocalCatId] = useState(txn.categoryId)
+  const [localIsTransfer, setLocalIsTransfer] = useState(txn.isTransfer)
 
   const localCatName = localCatId
     ? (allCategories.find((c) => c.id === localCatId)?.name ?? null)
     : null
+
+  function handleToggleTransfer() {
+    const next = !localIsTransfer
+    setLocalIsTransfer(next)
+    if (next) { setLocalCatId(null); setEditingCat(false) }
+    startTransition(async () => {
+      await toggleTransfer(txn.id)
+      router.refresh()
+    })
+  }
 
   function handleToggleCleared() {
     startTransition(() => toggleCleared(txn.id))
@@ -129,7 +385,9 @@ function TransactionRow({
     </select>
   )
 
-  const categoryButton = (
+  const categoryButton = localIsTransfer ? (
+    <span className="text-[#42b3c2] text-xs">↔ Transfer</span>
+  ) : (
     <button
       onClick={() => setEditingCat(true)}
       className={`text-left truncate w-full hover:underline transition-colors ${
@@ -142,6 +400,18 @@ function TransactionRow({
       title="Click to assign category"
     >
       {localCatName ?? (txn.amount < 0 ? 'Uncategorized' : 'Inflow')}
+    </button>
+  )
+
+  const transferToggle = (
+    <button
+      onClick={handleToggleTransfer}
+      title={localIsTransfer ? 'Unmark as transfer' : 'Mark as transfer (excludes from budget)'}
+      className={`text-xs px-0.5 transition-colors flex-shrink-0 ${
+        localIsTransfer ? 'text-[#42b3c2] hover:text-[#8a8fad]' : 'text-[#3a3b58] hover:text-[#42b3c2]'
+      }`}
+    >
+      ↔
     </button>
   )
 
@@ -220,6 +490,7 @@ function TransactionRow({
               )}
             </div>
             <div className="flex items-center gap-0.5 flex-shrink-0">
+              {!isTracking && transferToggle}
               <button
                 onClick={onEdit}
                 className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1.5 py-1 rounded transition-colors"
@@ -256,6 +527,9 @@ function TransactionRow({
           {formatMoney(txn.amount)}
         </span>
         <div className="flex justify-end items-center gap-1">
+          {!isTracking && (
+            <span className="opacity-0 group-hover:opacity-100 transition-all">{transferToggle}</span>
+          )}
           <button
             onClick={onEdit}
             className="text-xs text-[#3a3b58] hover:text-[#b3a1e6] opacity-0 group-hover:opacity-100 transition-all px-1"
@@ -293,7 +567,7 @@ function TransactionRow({
   )
 }
 
-export function AccountRegister({ account, transactions, allAccounts, allCategories, connection }: Props) {
+export function AccountRegister({ account, transactions, allAccounts, allCategories, connection, holdings, liabilityDetails }: Props) {
   const isTracking = TRACKING_TYPES.has(account.type)
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
@@ -307,10 +581,32 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [applyingRules, setApplyingRules] = useState(false)
-  const [relinkRequired, setRelinkRequired] = useState(false)
+  const [enriching, setEnriching] = useState(false)
+  const [relinkRequired, setRelinkRequired] = useState(connection?.requiresRelink ?? false)
   const [pendingRecat, setPendingRecat] = useState<{ payee: string; catId: string | null; catName: string | null } | null>(null)
   const [recatPending, setRecatPending] = useState(false)
   const [, startTransition] = useTransition()
+
+  async function handleEnrich() {
+    setEnriching(true)
+    setSyncResult(null)
+    const res = await fetch('/api/plaid/enrich', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    })
+    const data = await res.json()
+    setEnriching(false)
+    if (res.ok) {
+      const msg = data.enriched === 0
+        ? 'No new merchant names found'
+        : `${data.enriched} payee${data.enriched !== 1 ? 's' : ''} cleaned${data.categorized ? `, ${data.categorized} auto-categorized` : ''}`
+      setSyncResult(msg)
+      router.refresh()
+    } else {
+      setSyncResult(`Enrich failed: ${data.error ?? 'unknown error'}`)
+    }
+  }
 
   async function handleApplyRules() {
     setApplyingRules(true)
@@ -480,6 +776,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
             {!isTracking && (
               <button
+                onClick={handleEnrich}
+                disabled={enriching}
+                title="Clean up merchant names and auto-categorize using Plaid Enrich"
+                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+              >
+                {enriching ? 'Enriching…' : '✨ Enrich'}
+              </button>
+            )}
+            {!isTracking && (
+              <button
                 onClick={handleApplyRules}
                 disabled={applyingRules}
                 title="Re-categorize uncategorized transactions using saved payee rules"
@@ -523,6 +830,10 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
               )
             )}
+            {/* PlaidLink for investment/loan tracking accounts without a connection */}
+            {isTracking && !connection && (account.type === 'investment' || account.type === 'loan') && (
+              <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
+            )}
             {!isTracking && (
               <button
                 onClick={() => setShowImport(true)}
@@ -549,6 +860,26 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           )}
         </div>
       </div>
+
+      {/* Holdings panel — investment accounts */}
+      {account.type === 'investment' && (
+        <HoldingsPanel
+          holdings={holdings ?? []}
+          accountId={account.id}
+          connection={connection}
+          onSynced={(msg) => setSyncResult(msg)}
+        />
+      )}
+
+      {/* Liability details panel — loan / credit_card accounts */}
+      {(account.type === 'loan' || account.type === 'credit_card') && (
+        <LiabilityPanel
+          liability={liabilityDetails}
+          accountId={account.id}
+          connection={connection}
+          onSynced={(msg) => setSyncResult(msg)}
+        />
+      )}
 
       {/* Apply-to-all banner */}
       {pendingRecat && (
