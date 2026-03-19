@@ -132,9 +132,12 @@ export default async function BudgetPage({ params }: Props) {
 
     if (txn.categoryId) {
       if (ccCatIds.has(txn.categoryId)) {
-        // CC payment transaction (e.g. checking outflow to pay CC) — track activity only
-        activityMap[txnMonth] ??= {}
-        activityMap[txnMonth][txn.categoryId] = (activityMap[txnMonth][txn.categoryId] ?? 0) + txn.amount
+        // Only count the outgoing payment side (from checking/savings).
+        // The inflow on the CC account is just the receipt — counting it would cancel out the payment.
+        if (!ccAccountIds.has(txn.accountId)) {
+          activityMap[txnMonth] ??= {}
+          activityMap[txnMonth][txn.categoryId] = (activityMap[txnMonth][txn.categoryId] ?? 0) + txn.amount
+        }
       } else if (!legacyTransferCatIds.has(txn.categoryId)) {
         // Regular categorized transaction
         activityMap[txnMonth] ??= {}
@@ -143,7 +146,8 @@ export default async function BudgetPage({ params }: Props) {
           incomeMap[txnMonth] = (incomeMap[txnMonth] ?? 0) + txn.amount
         }
       }
-    } else if (txn.amount > 0) {
+    } else if (txn.amount > 0 && !ccAccountIds.has(txn.accountId)) {
+      // Exclude CC account inflows — payment receipts, not real income
       inflowMap[txnMonth] = (inflowMap[txnMonth] ?? 0) + txn.amount
     }
 
