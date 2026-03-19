@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { eq } from 'drizzle-orm'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { syncTransactions } from '@/lib/plaid-sync'
 
 /** Flag every connection sharing this Item as needing re-authentication. */
 async function markRelinkRequired(plaidItemId: string) {
@@ -78,9 +79,16 @@ export async function POST(req: NextRequest) {
 
     if (webhook_type === 'TRANSACTIONS') {
       if (webhook_code === 'SYNC_UPDATES_AVAILABLE') {
-        // New transactions are available. Users can trigger a manual sync,
-        // or you could enqueue a background job here if your infra supports it.
-        console.log(`[plaid/webhook] SYNC_UPDATES_AVAILABLE for item ${item_id}`)
+        console.log(`[plaid/webhook] SYNC_UPDATES_AVAILABLE for item ${item_id} — syncing all connections`)
+        // Find every connection for this Item and sync each one
+        const connections = await db.query.importConnections.findMany({
+          where: eq(importConnections.plaidItemId, item_id),
+        })
+        for (const conn of connections) {
+          if (!conn.accessTokenEncrypted) continue
+          const result = await syncTransactions(conn)
+          console.log(`[plaid/webhook] synced account ${conn.accountId}:`, result)
+        }
       }
 
       if (webhook_code === 'DEFAULT_UPDATE') {
