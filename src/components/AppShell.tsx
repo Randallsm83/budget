@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 
 export function AppShell({
@@ -11,16 +11,18 @@ export function AppShell({
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
-  const [collapsed, setCollapsed] = useState(false)
+  // Restore collapsed state from localStorage on first render
+  const [collapsed, setCollapsed] = useState(() => {
+    try { return localStorage.getItem('sidebar-collapsed') === 'true' } catch { return false }
+  })
   const pathname = usePathname()
 
-  // Close mobile drawer on navigation
-  useEffect(() => { setMobileOpen(false) }, [pathname])
-
-  // Restore desktop collapsed state from localStorage
-  useEffect(() => {
-    try { setCollapsed(localStorage.getItem('sidebar-collapsed') === 'true') } catch {}
-  }, [])
+  // Close mobile drawer on navigation — derived state pattern (no effect needed)
+  const [prevPathname, setPrevPathname] = useState(pathname)
+  if (prevPathname !== pathname) {
+    setPrevPathname(pathname)
+    setMobileOpen(false)
+  }
 
   function toggleCollapsed() {
     const next = !collapsed
@@ -47,7 +49,7 @@ export function AppShell({
           transition-all duration-200 ease-in-out
           ${mobileOpen ? 'translate-x-0' : '-translate-x-full'}
           lg:relative lg:translate-x-0
-          ${collapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0' : 'lg:w-56'}
+          ${collapsed ? 'lg:w-0 lg:overflow-hidden lg:border-r-0' : 'lg:w-72'}
         `}
       >
         {sidebarContent}

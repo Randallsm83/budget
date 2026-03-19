@@ -1,3 +1,4 @@
+import Image from 'next/image'
 import { auth } from '@/auth'
 import { redirect } from 'next/navigation'
 import { eq, asc, and } from 'drizzle-orm'
@@ -49,7 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {/* Branding */}
         <div className="px-4 py-4 border-b border-[#3a3b58]">
           <div className="flex items-center gap-2">
-            <img src="/logo.svg" alt="" aria-hidden="true" className="w-7 h-7 flex-shrink-0" />
+            <Image src="/logo.svg" alt="" aria-hidden width={28} height={28} className="flex-shrink-0" unoptimized />
             <h1 className="text-lg font-bold text-[#b3a1e6] tracking-tight">Budget</h1>
           </div>
           <p className="text-xs text-[#8a8fad] mt-0.5 truncate">{session.user?.name}</p>
@@ -76,7 +77,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
               {cashAccounts.map((account) => (
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#5ccc96]">{formatMoney(account.balance)}</span>
                 </NavLink>
@@ -93,7 +94,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
               {investmentAccounts.map((account) => (
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#f2ce00]">{formatMoney(account.balance)}</span>
                 </NavLink>
@@ -110,7 +111,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
               {propertyAccounts.map((account) => (
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#00a3cc]">{formatMoney(account.balance)}</span>
                 </NavLink>
@@ -127,7 +128,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
               </div>
               {liabilities.map((account) => (
                 <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-base leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
+                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
                   <span className="flex-1 truncate text-xs">{account.name}</span>
                   <span className="text-xs tabular-nums flex-shrink-0 text-[#ce6f8f]">{formatMoney(account.balance)}</span>
                 </NavLink>

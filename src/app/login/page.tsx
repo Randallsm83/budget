@@ -1,5 +1,6 @@
 'use client'
 
+import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, Suspense } from 'react'
@@ -69,7 +70,7 @@ function LoginForm() {
       <div className="w-full max-w-sm">
         {/* Logo / title */}
         <div className="mb-8 text-center">
-          <img src="/logo.svg" alt="Budget" className="w-14 h-14 mx-auto mb-4" />
+          <Image src="/logo.svg" alt="Budget" width={56} height={56} className="mx-auto mb-4" unoptimized />
           <h1 className="text-2xl font-bold text-[#ecf0f1]">Budget</h1>
           <p className="text-sm text-[#8a8fad] mt-1">Sign in to your account</p>
         </div>

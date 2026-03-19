@@ -18,13 +18,15 @@ export default function OAuthCallbackPage() {
   const router = useRouter()
   const [linkToken, setLinkToken] = useState<string | null>(null)
   const [error, setError] = useState('')
-  const [receivedRedirectUri, setReceivedRedirectUri] = useState<string | undefined>()
-  const [accountId, setAccountId] = useState<string | null>(null)
+  // Initialise synchronously from browser APIs — lazy initialisers run client-side only
+  const [receivedRedirectUri] = useState<string | undefined>(() =>
+    typeof window !== 'undefined' ? window.location.href : undefined
+  )
+  const [accountId] = useState<string | null>(() =>
+    typeof window !== 'undefined' ? sessionStorage.getItem('plaid_oauth_account_id') : null
+  )
 
   useEffect(() => {
-    setReceivedRedirectUri(window.location.href)
-    setAccountId(sessionStorage.getItem('plaid_oauth_account_id'))
-
     fetch('/api/plaid/link-token', { method: 'POST' })
       .then(async (r) => {
         const d = await r.json()

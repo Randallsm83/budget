@@ -137,7 +137,14 @@ export default function AccountsPage() {
     if (res.ok) setAccounts(await res.json())
     setLoading(false)
   }
-  useEffect(() => { loadAccounts() }, [])
+  useEffect(() => {
+    fetch('/api/accounts')
+      .then(async (res) => {
+        if (res.ok) setAccounts(await res.json())
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [])
 
   function handleClose(id: string) {
     startTransition(async () => { await closeAccount(id); router.refresh(); loadAccounts() })

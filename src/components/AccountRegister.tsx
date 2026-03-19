@@ -55,7 +55,6 @@ const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'other']
 
 function TransactionRow({
   txn,
-  allAccounts,
   allCategories,
   isTracking,
   onDelete,
@@ -63,7 +62,6 @@ function TransactionRow({
   onCategoryChanged,
 }: {
   txn: Transaction
-  allAccounts: { id: string; name: string }[]
   allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isTransfer: boolean }[]
   isTracking: boolean
   onDelete: (id: string) => void
@@ -449,13 +447,14 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                          rounded px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6]"
             />
           ) : (
-            <h2
-              className="text-base font-semibold text-[#ecf0f1] cursor-default"
-              onDoubleClick={() => setRenamingAccount(true)}
-              title="Double-click to rename"
-            >
-              {accountName}
-            </h2>
+            <div className="flex items-center gap-1.5">
+              <h2 className="text-base font-semibold text-[#ecf0f1]">{accountName}</h2>
+              <button
+                onClick={() => setRenamingAccount(true)}
+                title="Rename account"
+                className="text-xs text-[#5a5b78] hover:text-[#b3a1e6] transition-colors px-0.5"
+              >✎</button>
+            </div>
           )}
           <p className="text-xs text-[#8a8fad] mt-0.5 truncate">
             {TYPE_LABELS[account.type] ?? account.type}
@@ -602,7 +601,6 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           <TransactionRow
             key={txn.id}
             txn={txn}
-            allAccounts={allAccounts}
             allCategories={allCategories}
           isTracking={isTracking}
             onDelete={handleDelete}

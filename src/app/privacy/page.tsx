@@ -14,7 +14,7 @@ export default function PrivacyPage() {
       <section className="mb-8">
         <h2 className="text-lg font-semibold mb-2">1. Overview</h2>
         <p>
-          This Privacy Policy describes how the Personal Budget Application ("the App," "we," "us") collects,
+          This Privacy Policy describes how the Personal Budget Application (&ldquo;the App,&rdquo; &ldquo;we,&rdquo; &ldquo;us&rdquo;) collects,
           uses, stores, and deletes your personal and financial information. By using the App, you agree to
           the practices described in this policy.
         </p>
