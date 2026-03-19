@@ -38,23 +38,32 @@ interface Props {
 }
 
 const TYPE_LABELS: Record<string, string> = {
-  checking: 'Checking',
-  savings: 'Savings',
+  checking:    'Checking',
+  savings:     'Savings',
   credit_card: 'Credit Card',
-  cash: 'Cash',
-  other: 'Other',
+  cash:        'Cash',
+  loan:        'Loan',
+  real_estate: 'Real Estate',
+  vehicle:     'Vehicle',
+  investment:  'Investment',
+  other:       'Other',
 }
+
+// Tracking (off-budget) account types — no categories, no Plaid sync, no CSV
+const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'other'])
 
 function TransactionRow({
   txn,
   allAccounts,
   allCategories,
+  isTracking,
   onDelete,
   onEdit,
 }: {
   txn: Transaction
   allAccounts: { id: string; name: string }[]
   allCategories: { id: string; name: string; groupName: string; isIncome: boolean }[]
+  isTracking: boolean
   onDelete: (id: string) => void
   onEdit: () => void
 }) {
@@ -186,14 +195,18 @@ function TransactionRow({
               {formatMoney(txn.amount)}
             </span>
           </div>
-          {/* Row 2: date · category + actions */}
+          {/* Row 2: date · (category if budgeted) + actions */}
           <div className="flex items-center justify-between mt-1 gap-2">
             <div className="flex items-center gap-1 min-w-0 text-xs text-[#8a8fad] flex-1">
               <span className="flex-shrink-0 tabular-nums">{txn.date}</span>
-              <span className="flex-shrink-0">·</span>
-              <span className="truncate min-w-0">
-                {editingCat ? categorySelect : categoryButton}
-              </span>
+              {!isTracking && (
+                <>
+                  <span className="flex-shrink-0">·</span>
+                  <span className="truncate min-w-0">
+                    {editingCat ? categorySelect : categoryButton}
+                  </span>
+                </>
+              )}
             </div>
             <div className="flex items-center gap-0.5 flex-shrink-0">
               <button
@@ -210,16 +223,22 @@ function TransactionRow({
       </div>
 
       {/* ── Desktop grid layout ── */}
-      <div className="hidden sm:grid grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem] gap-2 px-4 py-2.5 items-center">
+      <div className={`hidden sm:grid gap-2 px-4 py-2.5 items-center ${
+        isTracking
+          ? 'grid-cols-[2rem_7rem_1fr_7rem_5rem]'
+          : 'grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem]'
+      }`}>
         {clearedDot}
         <span className="text-xs text-[#8a8fad] tabular-nums">{txn.date}</span>
         <div className="min-w-0">
           <p className="text-sm text-[#ecf0f1] truncate">{txn.payee || '—'}</p>
           {txn.memo && <p className="text-xs text-[#8a8fad] truncate">{txn.memo}</p>}
         </div>
-        <span className="text-xs truncate">
-          {editingCat ? categorySelect : categoryButton}
-        </span>
+        {!isTracking && (
+          <span className="text-xs truncate">
+            {editingCat ? categorySelect : categoryButton}
+          </span>
+        )}
         <span className={`text-sm tabular-nums text-right font-medium ${
           txn.amount < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'
         }`}>
@@ -264,6 +283,7 @@ function TransactionRow({
 }
 
 export function AccountRegister({ account, transactions, allAccounts, allCategories, connection }: Props) {
+  const isTracking = TRACKING_TYPES.has(account.type)
   const router = useRouter()
   const [showModal, setShowModal] = useState(false)
   const [showImport, setShowImport] = useState(false)
@@ -377,44 +397,53 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         </div>
         <div className="flex flex-col items-end gap-1">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
-            <button
-              onClick={handleApplyRules}
-              disabled={applyingRules}
-              title="Re-categorize uncategorized transactions using saved payee rules"
-              className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
-                         font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
-            >
-              {applyingRules ? 'Applying…' : '★ Rules'}
-            </button>
-            {connection ? (
+            {!isTracking && (
               <button
-                onClick={handleSync}
-                disabled={syncing}
-                title={syncResult ?? (connection.lastSyncedAt
-                  ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`
-                  : 'Never synced')}
-                className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                onClick={handleApplyRules}
+                disabled={applyingRules}
+                title="Re-categorize uncategorized transactions using saved payee rules"
+                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
                            font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
               >
-                {syncing ? 'Syncing…' : '↻ Sync'}
+                {applyingRules ? 'Applying…' : '★ Rules'}
               </button>
-            ) : (
-              <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
             )}
-            <button
-              onClick={() => setShowImport(true)}
-              className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
-                         font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors"
-            >
-              <span className="sm:hidden">CSV</span>
-              <span className="hidden sm:inline">Import CSV</span>
-            </button>
+            {!isTracking && (
+              connection ? (
+                <button
+                  onClick={handleSync}
+                  disabled={syncing}
+                  title={syncResult ?? (connection.lastSyncedAt
+                    ? `Last synced ${new Date(connection.lastSyncedAt).toLocaleString()}`
+                    : 'Never synced')}
+                  className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                             font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+                >
+                  {syncing ? 'Syncing…' : '↻ Sync'}
+                </button>
+              ) : (
+                <PlaidLink accountId={account.id} onConnected={() => router.refresh()} />
+              )
+            )}
+            {!isTracking && (
+              <button
+                onClick={() => setShowImport(true)}
+                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#ecf0f1]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors"
+              >
+                <span className="sm:hidden">CSV</span>
+                <span className="hidden sm:inline">Import CSV</span>
+              </button>
+            )}
             <button
               onClick={() => setShowModal(true)}
               className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-3 sm:px-4 py-1.5 rounded-lg text-sm transition-colors"
             >
-              <span className="sm:hidden">+ Add</span>
-              <span className="hidden sm:inline">+ Add Transaction</span>
+              {isTracking ? (
+                <><span className="sm:hidden">+ Value</span><span className="hidden sm:inline">+ Update Value</span></>
+              ) : (
+                <><span className="sm:hidden">+ Add</span><span className="hidden sm:inline">+ Add Transaction</span></>
+              )}
             </button>
           </div>
           {syncResult && (
@@ -424,13 +453,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
       </div>
 
       {/* Column headers — desktop only */}
-      <div className="flex-shrink-0 hidden sm:grid grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem] gap-2 px-4 py-2
+      <div className={`flex-shrink-0 hidden sm:grid gap-2 px-4 py-2
                       bg-[#1a1b2e] border-b border-[#3a3b58]
-                      text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">
+                      text-xs font-semibold text-[#8a8fad] uppercase tracking-wider ${
+        isTracking
+          ? 'grid-cols-[2rem_7rem_1fr_7rem_5rem]'
+          : 'grid-cols-[2rem_7rem_1fr_1fr_7rem_5rem]'
+      }`}>
         <span title="Cleared" className="text-center">○</span>
         <span>Date</span>
-        <span>Payee / Memo</span>
-        <span>Category</span>
+        <span>{isTracking ? 'Note' : 'Payee / Memo'}</span>
+        {!isTracking && <span>Category</span>}
         <span className="text-right">Amount</span>
         <span />
       </div>
@@ -439,7 +472,9 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
       <div className="flex-1 overflow-auto">
         {txns.length === 0 && (
           <div className="text-center py-12 text-[#8a8fad] text-sm">
-            No transactions yet. Add one to get started.
+            {isTracking
+              ? 'No value updates yet. Click \u201c+ Update Value\u201d to record the current market value.'
+              : 'No transactions yet. Add one to get started.'}
           </div>
         )}
         {txns.map((txn) => (
@@ -448,6 +483,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
             txn={txn}
             allAccounts={allAccounts}
             allCategories={allCategories}
+            isTracking={isTracking}
             onDelete={handleDelete}
             onEdit={() => setEditingTxn(txn)}
           />
@@ -459,6 +495,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           accounts={allAccounts}
           categories={allCategories}
           defaultAccountId={account.id}
+          isTracking={isTracking}
           onClose={() => {
             setShowModal(false)
             router.refresh()
@@ -470,6 +507,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         <AddTransactionModal
           accounts={allAccounts}
           categories={allCategories}
+          isTracking={isTracking}
           initialValues={{
             id: editingTxn.id,
             accountId: editingTxn.accountId,

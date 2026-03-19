@@ -30,10 +30,11 @@ interface Props {
   categories: CategoryOption[]
   defaultAccountId?: string
   initialValues?: InitialValues
+  isTracking?: boolean
   onClose: () => void
 }
 
-export function AddTransactionModal({ accounts, categories, defaultAccountId, initialValues, onClose }: Props) {
+export function AddTransactionModal({ accounts, categories, defaultAccountId, initialValues, isTracking = false, onClose }: Props) {
   const today = new Date().toISOString().substring(0, 10)
   const isEditing = !!initialValues
 
@@ -98,7 +99,9 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
     >
       <div className="bg-[#1f2039] border border-[#3a3b58] rounded-xl w-full max-w-md mx-4 p-6 shadow-2xl">
         <h2 className="text-lg font-semibold text-[#ecf0f1] mb-5">
-          {isEditing ? 'Edit Transaction' : 'Add Transaction'}
+          {isTracking
+            ? (isEditing ? 'Edit Value' : 'Update Value')
+            : (isEditing ? 'Edit Transaction' : 'Add Transaction')}
         </h2>
 
         <form onSubmit={handleSubmit} className="space-y-3">
@@ -134,53 +137,56 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
             </div>
           </div>
 
-          {/* Payee */}
+          {/* Payee / Note */}
           <div>
             <label className="block text-xs font-medium text-[#8a8fad] mb-1.5 uppercase tracking-wide">
-              Payee
+              {isTracking ? 'Note' : 'Payee'}
+              {isTracking && <span className="ml-1 normal-case text-[#3a3b58]">(optional)</span>}
             </label>
             <input
               type="text"
               value={payee}
               onChange={(e) => setPayee(e.target.value)}
-              placeholder="Who did you pay?"
+              placeholder={isTracking ? 'e.g. Annual appraisal, Zillow estimate…' : 'Who did you pay?'}
               className="w-full bg-[#2a2b45] border border-[#3a3b58] text-[#ecf0f1] rounded-lg px-3 py-2 text-sm
                          focus:outline-none focus:border-[#b3a1e6] transition-colors"
             />
           </div>
 
-          {/* Category */}
-          <div>
-            <label className="block text-xs font-medium text-[#8a8fad] mb-1.5 uppercase tracking-wide">
-              Category
-            </label>
-            <select
-              value={categoryId}
-              onChange={(e) => {
-                const cat = categories.find((c) => c.id === e.target.value)
-                setCategoryId(e.target.value)
-                if (cat) setIsOutflow(!cat.isIncome)
-              }}
-              className="w-full bg-[#2a2b45] border border-[#3a3b58] text-[#ecf0f1] rounded-lg px-3 py-2 text-sm
-                         focus:outline-none focus:border-[#b3a1e6] transition-colors"
-            >
-              <option value="">— Inflow / Ready to Assign —</option>
-              {categories.some((c) => c.isIncome) && (
-                <optgroup label="— Income —">
-                  {categories.filter((c) => c.isIncome).map((c) => (
-                    <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
-                  ))}
-                </optgroup>
-              )}
-              {categories.some((c) => !c.isIncome) && (
-                <optgroup label="— Expenses —">
-                  {categories.filter((c) => !c.isIncome).map((c) => (
-                    <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
-                  ))}
-                </optgroup>
-              )}
-            </select>
-          </div>
+          {/* Category — budget accounts only */}
+          {!isTracking && (
+            <div>
+              <label className="block text-xs font-medium text-[#8a8fad] mb-1.5 uppercase tracking-wide">
+                Category
+              </label>
+              <select
+                value={categoryId}
+                onChange={(e) => {
+                  const cat = categories.find((c) => c.id === e.target.value)
+                  setCategoryId(e.target.value)
+                  if (cat) setIsOutflow(!cat.isIncome)
+                }}
+                className="w-full bg-[#2a2b45] border border-[#3a3b58] text-[#ecf0f1] rounded-lg px-3 py-2 text-sm
+                           focus:outline-none focus:border-[#b3a1e6] transition-colors"
+              >
+                <option value="">— Inflow / Ready to Assign —</option>
+                {categories.some((c) => c.isIncome) && (
+                  <optgroup label="— Income —">
+                    {categories.filter((c) => c.isIncome).map((c) => (
+                      <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+                {categories.some((c) => !c.isIncome) && (
+                  <optgroup label="— Expenses —">
+                    {categories.filter((c) => !c.isIncome).map((c) => (
+                      <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                    ))}
+                  </optgroup>
+                )}
+              </select>
+            </div>
+          )}
 
           {/* Amount + direction */}
           <div>
@@ -190,7 +196,7 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
             <div className="flex gap-2">
               {/* Outflow / Inflow toggle */}
               <div className="flex rounded-lg overflow-hidden border border-[#3a3b58] text-sm flex-shrink-0">
-                <button
+              <button
                   type="button"
                   onClick={() => setIsOutflow(true)}
                   className={`px-3 py-2 transition-colors ${
@@ -199,7 +205,7 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
                       : 'bg-[#2a2b45] text-[#8a8fad] hover:text-[#ecf0f1]'
                   }`}
                 >
-                  Out
+                  {isTracking ? 'Decrease' : 'Out'}
                 </button>
                 <button
                   type="button"
@@ -210,7 +216,7 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
                       : 'bg-[#2a2b45] text-[#8a8fad] hover:text-[#ecf0f1]'
                   }`}
                 >
-                  In
+                  {isTracking ? 'Increase' : 'In'}
                 </button>
               </div>
               <input
@@ -260,7 +266,7 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
               className="flex-1 bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold py-2 rounded-lg text-sm
                          transition-colors disabled:opacity-60"
             >
-              {isPending ? 'Saving…' : isEditing ? 'Save Changes' : 'Add Transaction'}
+              {isPending ? 'Saving…' : isEditing ? 'Save Changes' : isTracking ? 'Update Value' : 'Add Transaction'}
             </button>
           </div>
         </form>
