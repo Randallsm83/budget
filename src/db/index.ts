@@ -15,7 +15,7 @@ function getDb(): Db {
     if (!process.env.DATABASE_URL) {
       throw new Error('DATABASE_URL environment variable is not set.')
     }
-    _db = drizzle(neon(process.env.DATABASE_URL), { schema })
+    _db = drizzle(neon(process.env.DATABASE_URL, { fetchOptions: { cache: 'no-store' } }), { schema })
   }
   return _db
 }
