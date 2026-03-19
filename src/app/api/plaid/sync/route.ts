@@ -40,16 +40,26 @@ export async function POST(req: NextRequest) {
   const modified: PlaidTransaction[] = []
   const removed: RemovedTransaction[] = []
 
-  while (hasMore) {
-    const res = await plaidClient.transactionsSync({ access_token: accessToken, cursor })
-    const filter = plaidAccountId
-      ? (t: PlaidTransaction) => t.account_id === plaidAccountId
-      : () => true
-    added.push(...res.data.added.filter(filter))
-    modified.push(...res.data.modified.filter(filter))
-    removed.push(...res.data.removed)
-    cursor = res.data.next_cursor
-    hasMore = res.data.has_more
+  try {
+    while (hasMore) {
+      const res = await plaidClient.transactionsSync({ access_token: accessToken, cursor })
+      const filter = plaidAccountId
+        ? (t: PlaidTransaction) => t.account_id === plaidAccountId
+        : () => true
+      added.push(...res.data.added.filter(filter))
+      modified.push(...res.data.modified.filter(filter))
+      removed.push(...res.data.removed)
+      cursor = res.data.next_cursor
+      hasMore = res.data.has_more
+    }
+  } catch (err: unknown) {
+    const errData = (err as { response?: { data?: { error_code?: string } } })?.response?.data
+    if (errData?.error_code === 'ITEM_LOGIN_REQUIRED') {
+      // Bank connection expired — client must re-link via Plaid update mode
+      return NextResponse.json({ requiresRelink: true })
+    }
+    const msg = errData ? JSON.stringify(errData) : (err instanceof Error ? err.message : String(err))
+    return NextResponse.json({ error: msg }, { status: 500 })
   }
 
   const userId = session.user.id

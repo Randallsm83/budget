@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
+import { PlaidRelink } from './PlaidRelink'
 import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
 
@@ -298,6 +299,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [syncing, setSyncing] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [applyingRules, setApplyingRules] = useState(false)
+  const [relinkRequired, setRelinkRequired] = useState(false)
   const [pendingRecat, setPendingRecat] = useState<{ payee: string; catId: string | null; catName: string | null } | null>(null)
   const [recatPending, setRecatPending] = useState(false)
   const [, startTransition] = useTransition()
@@ -335,7 +337,13 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     })
     const data = await res.json()
     setSyncing(false)
+    if (data.requiresRelink) {
+      setRelinkRequired(true)
+      setSyncResult('Bank connection expired — click Re-link Bank to reconnect')
+      return
+    }
     if (res.ok) {
+      setRelinkRequired(false)
       let msg = `+${data.added} added, ${data.modified} updated, ${data.removed} removed`
       if (data.firstSync) {
         msg += ' · Loading history — auto-syncing in 30s'
@@ -434,7 +442,12 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
               </button>
             )}
             {!isTracking && (
-              connection ? (
+              relinkRequired ? (
+                <PlaidRelink
+                  accountId={account.id}
+                  onRelinkComplete={() => { setRelinkRequired(false); handleSync() }}
+                />
+              ) : connection ? (
                 <button
                   onClick={handleSync}
                   disabled={syncing}
