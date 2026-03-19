@@ -44,6 +44,7 @@ export interface GroupRow {
   name: string
   isIncome: boolean
   isSystem: boolean
+  isTransfer: boolean
   categories: CategoryRow[]
   totalBudgeted: number
   totalActivity: number
@@ -578,8 +579,8 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
 
 export function BudgetTable({ month, groups }: { month: string; groups: GroupRow[] }) {
   const [, startTransition] = useTransition()
-  const incomeGroups  = groups.filter((g) => g.isIncome && !g.isSystem)
-  const expenseGroups = groups.filter((g) => !g.isIncome && !g.isSystem)
+  const incomeGroups  = groups.filter((g) => g.isIncome && !g.isSystem && !g.isTransfer)
+  const expenseGroups = groups.filter((g) => !g.isIncome && !g.isSystem && !g.isTransfer)
   const ccGroups      = groups.filter((g) => g.isSystem)
 
   const sensors = useSensors(

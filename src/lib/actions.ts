@@ -68,9 +68,18 @@ export async function ensureCCPaymentCategories() {
 
   // Find which CC accounts already have a linked payment category
   const existing = await db
-    .select({ ccAccountId: categories.ccAccountId })
+    .select({ id: categories.id, name: categories.name, ccAccountId: categories.ccAccountId })
     .from(categories)
     .where(and(eq(categories.userId, userId), eq(categories.groupId, group.id)))
+
+  // Sync names: if the account was renamed but the category wasn't updated, fix it now
+  for (const cat of existing) {
+    if (!cat.ccAccountId) continue
+    const acct = ccAccounts.find((a) => a.id === cat.ccAccountId)
+    if (acct && cat.name !== acct.name) {
+      await db.update(categories).set({ name: acct.name }).where(eq(categories.id, cat.id))
+    }
+  }
 
   const existingIds = new Set(existing.map((c) => c.ccAccountId))
   const missing = ccAccounts.filter((a) => !existingIds.has(a.id))

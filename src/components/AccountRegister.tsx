@@ -414,8 +414,10 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     setRenamingAccount(false)
     if (name.trim() && name.trim() !== account.name) {
       setAccountName(name.trim())
-      startTransition(() => updateAccount(account.id, { name: name.trim(), type: account.type }))
-      router.refresh()
+      startTransition(async () => {
+        await updateAccount(account.id, { name: name.trim(), type: account.type })
+        router.refresh()
+      })
     }
   }
 

@@ -224,6 +224,7 @@ export default async function BudgetPage({ params }: Props) {
         name: g.name,
         isIncome: g.isIncome,
         isSystem: g.isSystem,
+        isTransfer: g.isTransfer,
         categories: cats,
         totalBudgeted: cats.reduce((s, c) => s + c.budgeted, 0),
         totalActivity: cats.reduce((s, c) => s + c.activity, 0),
