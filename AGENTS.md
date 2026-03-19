@@ -78,6 +78,27 @@ The JWT callback in `src/auth.ts` propagates `user.id` into the token, and the s
 ### Income categories vs. expense categories
 `categoryGroups.isIncome = true` marks income groups. Income category transactions feed "Ready to Assign" (RTA); expense category transactions consume it. The budget page differentiates these during its iterative calculation.
 
+### CC Payment category system (YNAB-style)
+When a `credit_card` account is added, a linked CC Payment category is auto-created in a system-managed group:
+- `categoryGroups.isSystem = true` — the "Credit Card Payments" group; read-only, never shown in expense/income sections
+- `categoryGroups.isTransfer = true` — also set on the CC Payment group (identifies it internally)
+- `categories.ccAccountId` — UUID FK to `accounts.id`; links a CC payment category to its credit card account
+
+`ensureCCPaymentCategories()` in `actions.ts` is called on every budget page load. It creates any missing CC payment categories, syncs category names to their account names, and is a no-op if everything is already up to date.
+
+In the budget page calculation:
+- `ccAutoFundMap[month][catId]` accumulates the auto-funded amount (= sum of categorized CC outflows, negated) per CC payment category
+- `ccCatIds` — set of CC payment category IDs; their transactions affect `activityMap` but not `totalExpenseBudgeted`
+- `legacyTransferCatIds` — categories from old user-created transfer groups; excluded from all calculations
+- CC payment categories are excluded from `totalExpenseBudgeted` so they don't reduce Ready to Assign
+
+`BudgetTable` splits groups into `incomeGroups`, `expenseGroups`, and `ccGroups` (isSystem). CC groups render in a read-only `CCPaymentSection` at the bottom. `GroupRow` carries `isTransfer: boolean` as a defensive guard — both the page and BudgetTable filter out transfer groups.
+
+`updateAccount` syncs the linked CC payment category name whenever a credit card account is renamed.
+
+### Drag-and-drop reordering
+`@dnd-kit/core` and `@dnd-kit/sortable` handle drag-and-drop reordering of groups and categories in `BudgetTable`. `reorderGroups` and `reorderCategories` server actions persist new `sortOrder` values.
+
 ### Account types: on-budget vs. tracking
 Valid account types: `checking`, `savings`, `credit_card`, `cash`, `loan`, `real_estate`, `vehicle`, `investment`, `other`.
 
