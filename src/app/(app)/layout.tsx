@@ -7,19 +7,8 @@ import { accounts, importConnections } from '@/db/schema'
 import { NavLink } from '@/components/NavLink'
 import { SignOutButton } from '@/components/SignOutButton'
 import { AppShell } from '@/components/AppShell'
+import { AccountsNav } from '@/components/AccountsNav'
 import { formatMoney } from '@/lib/budget'
-
-const TYPE_ICONS: Record<string, string> = {
-  checking: '🏦',
-  savings: '💵',
-  credit_card: '💳',
-  cash: '💸',
-  loan: '🏠',
-  real_estate: '🏠',
-  vehicle: '🚗',
-  investment: '📈',
-  other: '📁',
-}
 
 const LIABILITY_TYPES = new Set(['credit_card', 'loan'])
 const INVESTMENT_TYPES = new Set(['investment'])
@@ -33,14 +22,18 @@ export default async function AppLayout({ children }: { children: React.ReactNod
     .select({ id: accounts.id, name: accounts.name, type: accounts.type, balance: accounts.balance })
     .from(accounts)
     .where(and(eq(accounts.userId, session.user.id), eq(accounts.closed, false)))
-    .orderBy(asc(accounts.createdAt))
+    .orderBy(asc(accounts.sortOrder), asc(accounts.createdAt))
 
-  // Build a set of account IDs whose bank connection needs re-authentication
+  // Fetch accounts whose bank connection needs re-authentication (with names for the banner)
   const relinkRows = await db
-    .select({ accountId: importConnections.accountId })
+    .select({ id: accounts.id, name: accounts.name })
     .from(importConnections)
+    .innerJoin(accounts, eq(importConnections.accountId, accounts.id))
     .where(and(eq(importConnections.userId, session.user.id), eq(importConnections.requiresRelink, true)))
-  const relinkAccountIds = new Set(relinkRows.map((r) => r.accountId).filter((id): id is string => id !== null))
+  // Deduplicate by account id (multiple connections can share an account)
+  const relinkAccountMap = new Map(relinkRows.map((r) => [r.id, r]))
+  const relinkAccounts = [...relinkAccountMap.values()]
+  const relinkAccountIds = new Set(relinkAccounts.map((r) => r.id))
 
   const cashAccounts = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type) && !INVESTMENT_TYPES.has(a.type) && !PROPERTY_TYPES.has(a.type))
   const investmentAccounts = userAccounts.filter((a) => INVESTMENT_TYPES.has(a.type))
@@ -75,85 +68,16 @@ export default async function AppLayout({ children }: { children: React.ReactNod
             Accounts
           </NavLink>
 
-          {/* Cash & Bank */}
-          {cashAccounts.length > 0 && (
-            <>
-              <div className="px-3 pt-1.5 pb-0.5 flex justify-between items-center">
-                <span className="text-[9px] font-semibold text-[#5ccc96] uppercase tracking-widest">Cash & Bank</span>
-                <span className="text-[9px] text-[#5ccc96] tabular-nums">{formatMoney(cashTotal)}</span>
-              </div>
-              {cashAccounts.map((account) => (
-                <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
-                  <span className="flex-1 truncate text-xs">{account.name}</span>
-                  {relinkAccountIds.has(account.id) && (
-                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
-                  )}
-                  <span className="text-xs tabular-nums flex-shrink-0 text-[#5ccc96]">{formatMoney(account.balance)}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
-
-          {/* Investments */}
-          {investmentAccounts.length > 0 && (
-            <>
-              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
-                <span className="text-[9px] font-semibold text-[#f2ce00] uppercase tracking-widest">Investments</span>
-                <span className="text-[9px] text-[#f2ce00] tabular-nums">{formatMoney(investmentTotal)}</span>
-              </div>
-              {investmentAccounts.map((account) => (
-                <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
-                  <span className="flex-1 truncate text-xs">{account.name}</span>
-                  {relinkAccountIds.has(account.id) && (
-                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
-                  )}
-                  <span className="text-xs tabular-nums flex-shrink-0 text-[#f2ce00]">{formatMoney(account.balance)}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
-
-          {/* Property */}
-          {propertyAccounts.length > 0 && (
-            <>
-              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
-                <span className="text-[9px] font-semibold text-[#00a3cc] uppercase tracking-widest">Property</span>
-                <span className="text-[9px] text-[#00a3cc] tabular-nums">{formatMoney(propertyTotal)}</span>
-              </div>
-              {propertyAccounts.map((account) => (
-                <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
-                  <span className="flex-1 truncate text-xs">{account.name}</span>
-                  {relinkAccountIds.has(account.id) && (
-                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
-                  )}
-                  <span className="text-xs tabular-nums flex-shrink-0 text-[#00a3cc]">{formatMoney(account.balance)}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
-
-          {/* Liabilities */}
-          {liabilities.length > 0 && (
-            <>
-              <div className="px-3 pt-2 pb-0.5 flex justify-between items-center">
-                <span className="text-[9px] font-semibold text-[#ce6f8f] uppercase tracking-widest">Liabilities</span>
-                <span className="text-[9px] text-[#ce6f8f] tabular-nums">{formatMoney(liabilityTotal)}</span>
-              </div>
-              {liabilities.map((account) => (
-                <NavLink key={account.id} href={`/accounts/${account.id}`}>
-                  <span className="text-sm leading-none flex-shrink-0">{TYPE_ICONS[account.type] ?? '📁'}</span>
-                  <span className="flex-1 truncate text-xs">{account.name}</span>
-                  {relinkAccountIds.has(account.id) && (
-                    <span className="text-[#e39400] text-xs flex-shrink-0" title="Bank connection needs attention">⚠</span>
-                  )}
-                  <span className="text-xs tabular-nums flex-shrink-0 text-[#ce6f8f]">{formatMoney(account.balance)}</span>
-                </NavLink>
-              ))}
-            </>
-          )}
+          <AccountsNav
+            cashAccounts={cashAccounts.map((a) => ({ ...a, needsRelink: relinkAccountIds.has(a.id) }))}
+            investmentAccounts={investmentAccounts.map((a) => ({ ...a, needsRelink: relinkAccountIds.has(a.id) }))}
+            propertyAccounts={propertyAccounts.map((a) => ({ ...a, needsRelink: relinkAccountIds.has(a.id) }))}
+            liabilities={liabilities.map((a) => ({ ...a, needsRelink: relinkAccountIds.has(a.id) }))}
+            cashTotal={cashTotal}
+            investmentTotal={investmentTotal}
+            propertyTotal={propertyTotal}
+            liabilityTotal={liabilityTotal}
+          />
 
           {userAccounts.length > 0 && (
             <div className="mx-2 mt-2 px-3 py-1.5 flex justify-between items-center border-t border-[#3a3b58]">
@@ -185,7 +109,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <AppShell sidebarContent={sidebarContent}>
+    <AppShell sidebarContent={sidebarContent} relinkAccounts={relinkAccounts}>
       {children}
     </AppShell>
   )

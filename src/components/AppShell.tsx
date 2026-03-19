@@ -2,12 +2,15 @@
 
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
+import { RelinkBanner } from './RelinkBanner'
 
 export function AppShell({
   sidebarContent,
+  relinkAccounts,
   children,
 }: {
   sidebarContent: React.ReactNode
+  relinkAccounts?: { id: string; name: string }[]
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -97,6 +100,7 @@ export function AppShell({
           <span className="text-sm font-bold text-[#b3a1e6] tracking-tight">Budget</span>
         </div>
 
+        <RelinkBanner accounts={relinkAccounts ?? []} />
         <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
       </div>
     </div>

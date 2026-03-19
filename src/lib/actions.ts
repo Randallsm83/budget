@@ -386,6 +386,18 @@ export async function updateAccount(id: string, data: { name: string; type: stri
   revalidatePath(`/accounts/${id}`)
 }
 
+export async function reorderAccounts(ids: string[]) {
+  const userId = await requireUser()
+  await Promise.all(
+    ids.map((id, i) =>
+      db.update(accounts)
+        .set({ sortOrder: i })
+        .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
+    )
+  )
+  revalidatePath('/')
+}
+
 export async function closeAccount(id: string) {
   const userId = await requireUser()
 
