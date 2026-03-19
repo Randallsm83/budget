@@ -33,6 +33,64 @@ async function requireUser(): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
+// CC Payment helpers (internal)
+// ---------------------------------------------------------------------------
+async function getOrCreateCCPaymentGroup(userId: string) {
+  const existing = await db.query.categoryGroups.findFirst({
+    where: and(
+      eq(categoryGroups.userId, userId),
+      eq(categoryGroups.isSystem, true),
+      eq(categoryGroups.isTransfer, true),
+    ),
+  })
+  if (existing) return existing
+
+  const [group] = await db
+    .insert(categoryGroups)
+    .values({ userId, name: 'Credit Card Payments', isIncome: false, isTransfer: true, isSystem: true, sortOrder: 9999 })
+    .returning()
+  return group
+}
+
+// Backfills CC Payment categories for any CC accounts that don't have one yet.
+// Safe to call on every budget page load — no-ops if already up to date.
+export async function ensureCCPaymentCategories() {
+  const userId = await requireUser()
+
+  const ccAccounts = await db
+    .select({ id: accounts.id, name: accounts.name })
+    .from(accounts)
+    .where(and(eq(accounts.userId, userId), eq(accounts.type, 'credit_card')))
+
+  if (ccAccounts.length === 0) return
+
+  const group = await getOrCreateCCPaymentGroup(userId)
+
+  // Find which CC accounts already have a linked payment category
+  const existing = await db
+    .select({ ccAccountId: categories.ccAccountId })
+    .from(categories)
+    .where(and(eq(categories.userId, userId), eq(categories.groupId, group.id)))
+
+  const existingIds = new Set(existing.map((c) => c.ccAccountId))
+  const missing = ccAccounts.filter((a) => !existingIds.has(a.id))
+  if (missing.length === 0) return
+
+  const [maxRow] = await db
+    .select({ val: max(categories.sortOrder) })
+    .from(categories)
+    .where(eq(categories.groupId, group.id))
+
+  let sortOrder = (maxRow?.val ?? -1) + 1
+  for (const acct of missing) {
+    await db.insert(categories).values({ userId, groupId: group.id, name: acct.name, ccAccountId: acct.id, sortOrder })
+    sortOrder++
+  }
+
+  revalidatePath('/budget')
+}
+
+// ---------------------------------------------------------------------------
 // Accounts
 // ---------------------------------------------------------------------------
 export async function addAccount(data: {
@@ -66,6 +124,23 @@ export async function addAccount(data: {
       amount: balanceMilliunits,
       cleared: true,
     })
+  }
+
+  // Auto-create CC Payment category for new credit card accounts
+  if (data.type === 'credit_card') {
+    const group = await getOrCreateCCPaymentGroup(userId)
+    const [maxRow] = await db
+      .select({ val: max(categories.sortOrder) })
+      .from(categories)
+      .where(eq(categories.groupId, group.id))
+    await db.insert(categories).values({
+      userId,
+      groupId: group.id,
+      name: account.name,
+      ccAccountId: account.id,
+      sortOrder: (maxRow?.val ?? -1) + 1,
+    })
+    revalidatePath('/budget')
   }
 
   revalidatePath('/accounts')
@@ -271,6 +346,15 @@ export async function updateAccount(id: string, data: { name: string; type: stri
     .set({ name: data.name.trim(), type: data.type })
     .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
 
+  // Keep linked CC Payment category name in sync
+  if (data.type === 'credit_card') {
+    await db
+      .update(categories)
+      .set({ name: data.name.trim() })
+      .where(and(eq(categories.userId, userId), eq(categories.ccAccountId, id)))
+    revalidatePath('/budget')
+  }
+
   revalidatePath('/accounts')
   revalidatePath(`/accounts/${id}`)
 }
@@ -295,13 +379,32 @@ export async function closeAccount(id: string) {
 export async function deleteAccount(id: string) {
   const userId = await requireUser()
 
-  // Transactions are cascade-deleted by the DB (onDelete: 'cascade').
-  // Verify ownership before deleting.
   const account = await db.query.accounts.findFirst({
     where: and(eq(accounts.id, id), eq(accounts.userId, userId)),
   })
   if (!account) throw new Error('Account not found')
 
+  // Delete linked CC Payment category before deleting the account
+  // (ccAccountId will become null via onDelete:set null, so we delete it explicitly first)
+  if (account.type === 'credit_card') {
+    const ccCat = await db.query.categories.findFirst({
+      where: and(eq(categories.userId, userId), eq(categories.ccAccountId, id)),
+    })
+    if (ccCat) {
+      await db.delete(categories).where(eq(categories.id, ccCat.id))
+      // Clean up empty CC Payment group
+      const [remaining] = await db
+        .select({ cnt: count(categories.id) })
+        .from(categories)
+        .where(eq(categories.groupId, ccCat.groupId))
+      if ((remaining?.cnt ?? 0) === 0) {
+        await db.delete(categoryGroups).where(eq(categoryGroups.id, ccCat.groupId))
+      }
+      revalidatePath('/budget')
+    }
+  }
+
+  // Transactions are cascade-deleted by the DB (onDelete: 'cascade').
   await db
     .delete(accounts)
     .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
@@ -313,7 +416,7 @@ export async function deleteAccount(id: string) {
 // ---------------------------------------------------------------------------
 // Category groups
 // ---------------------------------------------------------------------------
-export async function addCategoryGroup(name: string, isIncome = false, isTransfer = false) {
+export async function addCategoryGroup(name: string, isIncome = false) {
   const userId = await requireUser()
   if (!name.trim()) throw new Error('Name is required')
 
@@ -326,7 +429,7 @@ export async function addCategoryGroup(name: string, isIncome = false, isTransfe
 
   const [group] = await db
     .insert(categoryGroups)
-    .values({ userId, name: name.trim(), isIncome, isTransfer, sortOrder })
+    .values({ userId, name: name.trim(), isIncome, isTransfer: false, sortOrder })
     .returning()
 
   revalidatePath('/budget')

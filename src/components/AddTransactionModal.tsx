@@ -8,7 +8,7 @@ interface CategoryOption {
   name: string
   groupName: string
   isIncome: boolean
-  isTransfer?: boolean
+  isCCPayment?: boolean
 }
 
 interface AccountOption {
@@ -178,17 +178,17 @@ export function AddTransactionModal({ accounts, categories, defaultAccountId, in
                     ))}
                   </optgroup>
                 )}
-                {categories.some((c) => !c.isIncome && !c.isTransfer) && (
+                {categories.some((c) => !c.isIncome && !c.isCCPayment) && (
                   <optgroup label="— Expenses —">
-                    {categories.filter((c) => !c.isIncome && !c.isTransfer).map((c) => (
+                    {categories.filter((c) => !c.isIncome && !c.isCCPayment).map((c) => (
                       <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
                     ))}
                   </optgroup>
                 )}
-                {categories.some((c) => c.isTransfer) && (
-                  <optgroup label="— Transfers —">
-                    {categories.filter((c) => c.isTransfer).map((c) => (
-                      <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+                {categories.some((c) => c.isCCPayment) && (
+                  <optgroup label="— 💳 Credit Card Payments —">
+                    {categories.filter((c) => c.isCCPayment).map((c) => (
+                      <option key={c.id} value={c.id}>{c.name}</option>
                     ))}
                   </optgroup>
                 )}

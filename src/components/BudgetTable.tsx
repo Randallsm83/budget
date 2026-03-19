@@ -36,13 +36,14 @@ export interface CategoryRow {
   budgeted: number // milliunits
   activity: number // milliunits
   balance: number // milliunits
+  isCCPayment: boolean
 }
 
 export interface GroupRow {
   id: string
   name: string
   isIncome: boolean
-  isTransfer: boolean
+  isSystem: boolean
   categories: CategoryRow[]
   totalBudgeted: number
   totalActivity: number
@@ -455,7 +456,7 @@ function GroupSection({ group, month, dragHandle }: {
 // ---------------------------------------------------------------------------
 // Add group row
 // ---------------------------------------------------------------------------
-type GroupType = 'expense' | 'income' | 'transfer'
+type GroupType = 'expense' | 'income'
 
 function AddGroupRow() {
   const [open, setOpen] = useState(false)
@@ -470,7 +471,7 @@ function AddGroupRow() {
     const trimmed = name.trim()
     if (!trimmed) { setOpen(false); return }
     startTransition(async () => {
-      await addCategoryGroup(trimmed, groupType === 'income', groupType === 'transfer')
+      await addCategoryGroup(trimmed, groupType === 'income')
       setName(''); setGroupType('expense'); setOpen(false)
     })
   }
@@ -490,20 +491,18 @@ function AddGroupRow() {
   return (
     <div className="px-4 sm:px-6 py-3 border-t border-[#3a3b58] mt-2 space-y-2">
       <div className="flex rounded-lg bg-[#2a2b45] p-0.5 w-fit">
-        {(['expense', 'income', 'transfer'] as const).map((t) => (
+        {(['expense', 'income'] as const).map((t) => (
           <button
             key={t} type="button"
             onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setGroupType(t); ref.current?.focus() }}
             className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
               groupType === t
-                ? t === 'income' ? 'bg-[#5ccc96] text-[#1a1b2e]'
-                  : t === 'transfer' ? 'bg-[#42b3c2] text-[#1a1b2e]'
-                  : 'bg-[#1f2039] text-[#ecf0f1] shadow'
+                ? t === 'income' ? 'bg-[#5ccc96] text-[#1a1b2e]' : 'bg-[#1f2039] text-[#ecf0f1] shadow'
                 : 'text-[#8a8fad] hover:text-[#ecf0f1]'
             }`}
           >
-            {t === 'income' ? 'Income' : t === 'transfer' ? 'Transfer' : 'Expense'}
+            {t === 'income' ? 'Income' : 'Expense'}
           </button>
         ))}
       </div>
@@ -516,7 +515,7 @@ function AddGroupRow() {
             if (e.key === 'Enter') commit()
             if (e.key === 'Escape') { setOpen(false); setName(''); setGroupType('expense') }
           }}
-          placeholder={groupType === 'income' ? 'e.g. Salary, Freelance…' : groupType === 'transfer' ? 'e.g. Transfers…' : 'Group name…'}
+          placeholder={groupType === 'income' ? 'e.g. Salary, Freelance…' : 'Group name…'}
           disabled={isPending}
           className="flex-1 bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] text-sm rounded
                      px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] disabled:opacity-50"
@@ -534,11 +533,54 @@ function AddGroupRow() {
 // ---------------------------------------------------------------------------
 // Main table
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// CC Payment group — read-only, system-managed section
+// ---------------------------------------------------------------------------
+function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
+  if (groups.length === 0) return null
+  return (
+    <>
+      <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-6 py-1.5
+                      bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
+        <span /><span>💳 Credit Card Payments</span>
+        <span className="text-right pr-2">Reserved</span>
+        <span className="text-right pr-2">Paid</span>
+        <span className="text-right">Still Owed</span>
+        <span />
+      </div>
+      {groups.flatMap((g) =>
+        g.categories.map((cat) => (
+          <div key={cat.id}>
+            {/* Mobile */}
+            <div className="sm:hidden flex items-center gap-2 px-4 py-2.5 border-b border-[#1f2039]">
+              <span className="text-xs text-[#42b3c2] flex-shrink-0">💳</span>
+              <span className="text-sm text-[#ecf0f1] flex-1 truncate">{cat.name}</span>
+              <Amount value={cat.balance} className="text-sm flex-shrink-0" />
+            </div>
+            {/* Desktop */}
+            <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-3 sm:px-6 py-1.5
+                            border-b border-[#1f2039] items-center">
+              <span className="text-xs text-[#42b3c2] flex-shrink-0">💳</span>
+              <span className="text-sm text-[#ecf0f1] truncate" title="Auto-managed — funded by CC spending">{cat.name}</span>
+              <span className="text-right text-sm text-[#42b3c2] tabular-nums pr-2" title="Auto-funded from CC spending this month">
+                {formatMoney(cat.budgeted)}
+              </span>
+              <Amount value={cat.activity} className="text-right text-sm pr-2" />
+              <Amount value={cat.balance} className="text-right text-sm font-medium" />
+              <span />
+            </div>
+          </div>
+        ))
+      )}
+    </>
+  )
+}
+
 export function BudgetTable({ month, groups }: { month: string; groups: GroupRow[] }) {
   const [, startTransition] = useTransition()
-  const incomeGroups   = groups.filter((g) => g.isIncome)
-  const expenseGroups  = groups.filter((g) => !g.isIncome && !g.isTransfer)
-  const transferGroups = groups.filter((g) => g.isTransfer)
+  const incomeGroups  = groups.filter((g) => g.isIncome && !g.isSystem)
+  const expenseGroups = groups.filter((g) => !g.isIncome && !g.isSystem)
+  const ccGroups      = groups.filter((g) => g.isSystem)
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
@@ -606,7 +648,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
         )}
 
         {/* Expenses */}
-        {expenseGroups.length === 0 && incomeGroups.length === 0 && transferGroups.length === 0 && (
+        {expenseGroups.length === 0 && incomeGroups.length === 0 && (
           <div className="px-6 py-12 text-center text-[#8a8fad] text-sm">
             No categories yet.{' '}
             <span className="text-[#b3a1e6]">Use &ldquo;+ Add Group&rdquo; below to get started.</span>
@@ -619,13 +661,8 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
           </>
         )}
 
-        {/* Transfers */}
-        {transferGroups.length > 0 && (
-          <>
-            {sectionLabel('↔️ Transfers', 'text-[#42b3c2]', ['Budgeted', 'Activity', 'Balance'])}
-            {renderSection(transferGroups)}
-          </>
-        )}
+        {/* Credit Card Payments — system-managed, read-only */}
+        <CCPaymentSection groups={ccGroups} />
 
         <AddGroupRow />
       </div>

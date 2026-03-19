@@ -34,7 +34,7 @@ interface Props {
   account: Account
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
-  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isTransfer: boolean }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isCCPayment: boolean }[]
   connection: { id: string; lastSyncedAt: string | null } | null
 }
 
@@ -62,7 +62,7 @@ function TransactionRow({
   onCategoryChanged,
 }: {
   txn: Transaction
-  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isTransfer: boolean }[]
+  allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isCCPayment: boolean }[]
   isTracking: boolean
   onDelete: (id: string) => void
   onEdit: () => void
@@ -111,17 +111,17 @@ function TransactionRow({
           ))}
         </optgroup>
       )}
-      {allCategories.some((c) => !c.isIncome && !c.isTransfer) && (
+      {allCategories.some((c) => !c.isIncome && !c.isCCPayment) && (
         <optgroup label="Expenses">
-          {allCategories.filter((c) => !c.isIncome && !c.isTransfer).map((c) => (
+          {allCategories.filter((c) => !c.isIncome && !c.isCCPayment).map((c) => (
             <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
           ))}
         </optgroup>
       )}
-      {allCategories.some((c) => c.isTransfer) && (
-        <optgroup label="↔ Transfers">
-          {allCategories.filter((c) => c.isTransfer).map((c) => (
-            <option key={c.id} value={c.id}>{c.groupName}: {c.name}</option>
+      {allCategories.some((c) => c.isCCPayment) && (
+        <optgroup label="💳 Credit Card Payments">
+          {allCategories.filter((c) => c.isCCPayment).map((c) => (
+            <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </optgroup>
       )}

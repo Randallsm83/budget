@@ -53,6 +53,8 @@ export const categoryGroups = pgTable('category_groups', {
   name: text('name').notNull(),
   isIncome: boolean('is_income').notNull().default(false),
   isTransfer: boolean('is_transfer').notNull().default(false),
+  // isSystem = auto-managed by the app (e.g. Credit Card Payments group)
+  isSystem: boolean('is_system').notNull().default(false),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
@@ -66,6 +68,8 @@ export const categories = pgTable('categories', {
     .notNull()
     .references(() => categoryGroups.id, { onDelete: 'cascade' }),
   name: text('name').notNull(),
+  // ccAccountId: set when this category is the CC payment bucket for a credit card account
+  ccAccountId: uuid('cc_account_id').references(() => accounts.id, { onDelete: 'set null' }),
   sortOrder: integer('sort_order').notNull().default(0),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
@@ -183,6 +187,10 @@ export const categoriesRelations = relations(categories, ({ one, many }) => ({
   group: one(categoryGroups, {
     fields: [categories.groupId],
     references: [categoryGroups.id],
+  }),
+  ccAccount: one(accounts, {
+    fields: [categories.ccAccountId],
+    references: [accounts.id],
   }),
   monthBudgets: many(monthBudgets),
   transactions: many(transactions),
