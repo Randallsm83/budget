@@ -1,3 +1,4 @@
+import { unstable_noStore as noStore } from 'next/cache'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, transactions, monthBudgets, categoryGroups, categories } from '@/db/schema'
@@ -23,6 +24,7 @@ function isValidMonth(m: string) {
 }
 
 export default async function BudgetPage({ params }: Props) {
+  noStore()
   const { month } = await params
 
   if (!isValidMonth(month)) {

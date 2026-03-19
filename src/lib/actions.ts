@@ -632,6 +632,56 @@ export async function deleteCategory(id: string) {
 }
 
 // ---------------------------------------------------------------------------
+// Tracking account balance updates
+// ---------------------------------------------------------------------------
+/**
+ * Sets the balance of a tracking account (investment, loan, real_estate, etc.)
+ * to an explicit new value and records a cleared adjustment transaction for
+ * the difference.  This is the preferred workflow for these accounts since
+ * users typically know the current total value from a statement rather than
+ * the exact delta.
+ */
+export async function updateTrackingBalance(
+  accountId: string,
+  newBalanceMilliunits: number,
+  note?: string,
+  date?: string,
+): Promise<void> {
+  const userId = await requireUser()
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, accountId), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  const adjustment = newBalanceMilliunits - account.balance
+  if (adjustment === 0) return
+
+  const today = new Date().toISOString().substring(0, 10)
+
+  await db.insert(transactions).values({
+    userId,
+    accountId,
+    date: date ?? today,
+    payee: note?.trim() || 'Balance Adjustment',
+    amount: adjustment,
+    cleared: true,
+  })
+
+  await db
+    .update(accounts)
+    .set({
+      balance: newBalanceMilliunits,
+      clearedBalance: newBalanceMilliunits,
+      updatedAt: new Date(),
+    })
+    .where(eq(accounts.id, accountId))
+
+  revalidatePath(`/accounts/${accountId}`)
+  revalidatePath('/accounts')
+}
+
+// ---------------------------------------------------------------------------
 // CSV Import
 // ---------------------------------------------------------------------------
 export interface CsvRow {

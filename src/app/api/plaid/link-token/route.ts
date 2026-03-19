@@ -12,6 +12,7 @@ export async function POST() {
       user: { client_user_id: session.user.id },
       client_name: 'Coffer',
       products: [Products.Transactions],
+      optional_products: [Products.Investments, Products.Liabilities],
       country_codes: [CountryCode.Us],
       language: 'en',
       ...(process.env.PLAID_REDIRECT_URI

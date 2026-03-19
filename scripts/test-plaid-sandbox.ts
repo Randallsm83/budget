@@ -6,7 +6,15 @@
  *   1. "Test Enrich endpoint"  — calls /transactions/enrich with preset sandbox descriptions
  *   2. "Setup webhooks"        — fires NEW_ACCOUNTS_AVAILABLE (falls back to SYNC_UPDATES_AVAILABLE)
  */
-import { Configuration, PlaidApi, PlaidEnvironments, Products, EnrichTransactionDirection } from 'plaid'
+import {
+  Configuration,
+  PlaidApi,
+  PlaidEnvironments,
+  Products,
+  EnrichTransactionDirection,
+  WebhookType,
+  SandboxItemFireWebhookRequestWebhookCodeEnum,
+} from 'plaid'
 
 const CLIENT_ID = process.env.PLAID_CLIENT_ID
 const SANDBOX_SECRET = process.env.PLAID_SANDBOX_SECRET
@@ -111,8 +119,8 @@ async function testWebhook() {
   try {
     const res = await plaid.sandboxItemFireWebhook({
       access_token: accessToken,
-      webhook_type: 'ITEM',
-      webhook_code: 'NEW_ACCOUNTS_AVAILABLE',
+      webhook_type: WebhookType.Item,
+      webhook_code: SandboxItemFireWebhookRequestWebhookCodeEnum.NewAccountsAvailable,
     })
     console.log('✓  NEW_ACCOUNTS_AVAILABLE fired:', res.data)
     return
@@ -134,8 +142,8 @@ async function testWebhook() {
   try {
     const res = await plaid.sandboxItemFireWebhook({
       access_token: accessToken,
-      webhook_type: 'TRANSACTIONS',
-      webhook_code: 'SYNC_UPDATES_AVAILABLE',
+      webhook_type: WebhookType.Transactions,
+      webhook_code: SandboxItemFireWebhookRequestWebhookCodeEnum.SyncUpdatesAvailable,
     })
     console.log('✓  SYNC_UPDATES_AVAILABLE fired:', res.data)
   } catch (err) {

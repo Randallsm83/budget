@@ -7,6 +7,7 @@ import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
 import { PlaidRelink } from './PlaidRelink'
 import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
 
 interface Transaction {
@@ -51,7 +52,7 @@ const TYPE_LABELS: Record<string, string> = {
 }
 
 // Tracking (off-budget) account types — no categories, no Plaid sync, no CSV
-const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'other'])
+const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'loan', 'other'])
 
 function TransactionRow({
   txn,
@@ -301,6 +302,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [txns, setTxns] = useState(transactions)
   const [renamingAccount, setRenamingAccount] = useState(false)
   const [accountName, setAccountName] = useState(account.name)
+  const [showUpdateBalance, setShowUpdateBalance] = useState(false)
   const [syncing, setSyncing] = useState(false)
   const [loadingHistory, setLoadingHistory] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
@@ -460,14 +462,18 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           )}
           <p className="text-xs text-[#8a8fad] mt-0.5 truncate">
             {TYPE_LABELS[account.type] ?? account.type}
-            {' · Balance: '}
+            {isTracking ? ' · Current Value: ' : ' · Balance: '}
             <span className={account.balance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
               {formatMoney(account.balance)}
             </span>
-            {' · Cleared: '}
-            <span className={account.clearedBalance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
-              {formatMoney(account.clearedBalance)}
-            </span>
+            {!isTracking && (
+              <>
+                {' · Cleared: '}
+                <span className={account.clearedBalance < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'}>
+                  {formatMoney(account.clearedBalance)}
+                </span>
+              </>
+            )}
           </p>
         </div>
         <div className="flex flex-col items-end gap-1 min-w-0 flex-shrink-0">
@@ -528,7 +534,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
               </button>
             )}
             <button
-              onClick={() => setShowModal(true)}
+              onClick={() => isTracking ? setShowUpdateBalance(true) : setShowModal(true)}
               className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-3 sm:px-4 py-1.5 rounded-lg text-sm transition-colors"
             >
               {isTracking ? (
@@ -613,6 +619,15 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           />
         ))}
       </div>
+
+      {showUpdateBalance && (
+        <UpdateBalanceModal
+          accountId={account.id}
+          accountType={account.type}
+          currentBalance={account.balance}
+          onClose={() => setShowUpdateBalance(false)}
+        />
+      )}
 
       {showModal && (
         <AddTransactionModal

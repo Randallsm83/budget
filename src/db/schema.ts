@@ -7,6 +7,8 @@ import {
   timestamp,
   date,
   unique,
+  real,
+  jsonb,
 } from 'drizzle-orm/pg-core'
 import { relations } from 'drizzle-orm'
 
@@ -159,6 +161,55 @@ export const importConnections = pgTable('import_connections', {
 })
 
 // ---------------------------------------------------------------------------
+// Investment holdings — one row per (accountId, plaidSecurityId)
+// ---------------------------------------------------------------------------
+export const investmentHoldings = pgTable(
+  'investment_holdings',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    plaidSecurityId: text('plaid_security_id').notNull(),
+    name: text('name').notNull(),
+    tickerSymbol: text('ticker_symbol'),
+    securityType: text('security_type'),
+    quantity: real('quantity').notNull(),
+    institutionPrice: real('institution_price').notNull(),
+    institutionValue: real('institution_value').notNull(),
+    costBasis: real('cost_basis'),
+    isoCurrencyCode: text('iso_currency_code'),
+    updatedAt: timestamp('updated_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [unique('ux_investment_holdings').on(t.accountId, t.plaidSecurityId)],
+)
+
+// ---------------------------------------------------------------------------
+// Liability details — one row per account (credit, student, mortgage)
+// ---------------------------------------------------------------------------
+export const liabilityDetails = pgTable(
+  'liability_details',
+  {
+    id: uuid('id').primaryKey().defaultRandom(),
+    userId: uuid('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    accountId: uuid('account_id')
+      .notNull()
+      .references(() => accounts.id, { onDelete: 'cascade' }),
+    liabilityType: text('liability_type').notNull(), // 'credit' | 'student' | 'mortgage'
+    details: jsonb('details').notNull(),
+    syncedAt: timestamp('synced_at').notNull().defaultNow(),
+    createdAt: timestamp('created_at').notNull().defaultNow(),
+  },
+  (t) => [unique('ux_liability_details').on(t.accountId)],
+)
+
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 export const usersRelations = relations(users, ({ many }) => ({
@@ -169,12 +220,16 @@ export const usersRelations = relations(users, ({ many }) => ({
   transactions: many(transactions),
   importConnections: many(importConnections),
   payeeRules: many(payeeRules),
+  investmentHoldings: many(investmentHoldings),
+  liabilityDetails: many(liabilityDetails),
 }))
 
 export const accountsRelations = relations(accounts, ({ one, many }) => ({
   user: one(users, { fields: [accounts.userId], references: [users.id] }),
   transactions: many(transactions),
   importConnections: many(importConnections),
+  investmentHoldings: many(investmentHoldings),
+  liabilityDetails: many(liabilityDetails),
 }))
 
 export const categoryGroupsRelations = relations(categoryGroups, ({ one, many }) => ({
@@ -228,4 +283,14 @@ export const importConnectionsRelations = relations(importConnections, ({ one })
 export const payeeRulesRelations = relations(payeeRules, ({ one }) => ({
   user: one(users, { fields: [payeeRules.userId], references: [users.id] }),
   category: one(categories, { fields: [payeeRules.categoryId], references: [categories.id] }),
+}))
+
+export const investmentHoldingsRelations = relations(investmentHoldings, ({ one }) => ({
+  user: one(users, { fields: [investmentHoldings.userId], references: [users.id] }),
+  account: one(accounts, { fields: [investmentHoldings.accountId], references: [accounts.id] }),
+}))
+
+export const liabilityDetailsRelations = relations(liabilityDetails, ({ one }) => ({
+  user: one(users, { fields: [liabilityDetails.userId], references: [users.id] }),
+  account: one(accounts, { fields: [liabilityDetails.accountId], references: [accounts.id] }),
 }))
