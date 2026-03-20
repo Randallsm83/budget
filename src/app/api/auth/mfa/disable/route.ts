@@ -4,6 +4,12 @@ import { eq } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { users } from '@/db/schema'
+import { decrypt } from '@/lib/crypto'
+
+// Handles both encrypted (ivHex:tagHex:ciphertextHex) and legacy plaintext base32 secrets.
+function resolveMfaSecret(stored: string): string {
+  return stored.includes(':') ? decrypt(stored) : stored
+}
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -23,7 +29,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'MFA not enabled' }, { status: 400 })
   }
 
-  const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(user.mfaSecret) })
+  const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(resolveMfaSecret(user.mfaSecret)) })
   const delta = totp.validate({ token: code.trim(), window: 1 })
   if (delta === null) {
     return NextResponse.json({ error: 'Invalid code' }, { status: 400 })

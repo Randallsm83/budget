@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
+import { signOut } from 'next-auth/react'
 
 export default function SecuritySettingsPage() {
   const router = useRouter()
@@ -11,7 +12,7 @@ export default function SecuritySettingsPage() {
   const [success, setSuccess] = useState('')
 
   // Setup flow state
-  const [setupStep, setSetupStep] = useState<'idle' | 'scan' | 'verify' | 'disable'>('idle')
+  const [setupStep, setSetupStep] = useState<'idle' | 'scan' | 'verify' | 'disable' | 'delete-confirm'>('idle')
   const [secret, setSecret] = useState('')
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState('')
   const [code, setCode] = useState('')
@@ -225,6 +226,68 @@ export default function SecuritySettingsPage() {
               </button>
             </div>
           </form>
+        )}
+      </div>
+      {/* Danger zone */}
+      <div className="mt-8 bg-[#1f2039] border border-[#ce6f8f]/30 rounded-xl p-5">
+        <p className="text-sm font-medium text-[#ecf0f1] mb-1">Delete Account</p>
+        <p className="text-xs text-[#8a8fad] mb-4">
+          Permanently deletes your Coffer account, all budgets, transactions, and bank connections.
+          This also calls Plaid’s /item/remove for every linked institution. This cannot be undone.
+        </p>
+
+        {setupStep !== 'delete-confirm' ? (
+          <button
+            onClick={() => { setSetupStep('delete-confirm'); setError(''); setCode('') }}
+            className="w-full border border-[#ce6f8f] text-[#ce6f8f] hover:bg-[#ce6f8f]/10 font-medium py-2 rounded-lg text-sm transition-colors"
+          >
+            Delete my account
+          </button>
+        ) : (
+          <div className="space-y-3">
+            <p className="text-sm text-[#8a8fad]">
+              Type <strong className="text-[#ecf0f1] font-mono">delete</strong> to confirm.
+            </p>
+            <input
+              type="text"
+              autoFocus
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              className={inputCls}
+              placeholder="delete"
+            />
+            {error && <p className="text-sm text-[#ce6f8f]">{error}</p>}
+            <div className="flex gap-2">
+              <button
+                type="button"
+                onClick={() => { setSetupStep('idle'); setError(''); setCode('') }}
+                className="flex-1 border border-[#3a3b58] text-[#8a8fad] hover:text-[#ecf0f1] font-medium py-2 rounded-lg text-sm transition-colors"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                disabled={loading || code !== 'delete'}
+                onClick={async () => {
+                  setLoading(true)
+                  setError('')
+                  const res = await fetch('/api/user/delete', { method: 'POST' })
+                  if (!res.ok) {
+                    const d = await res.json().catch(() => ({}))
+                    setError(d.error ?? 'Failed to delete account')
+                    setLoading(false)
+                    return
+                  }
+                  await signOut({ redirect: false })
+                  router.replace('/login')
+                }}
+                className="flex-1 bg-[#ce6f8f] hover:bg-[#d4789a] text-white font-semibold py-2 rounded-lg text-sm
+                           transition-colors disabled:opacity-60"
+              >
+                {loading ? 'Deleting…' : 'Delete forever'}
+              </button>
+            </div>
+          </div>
         )}
       </div>
     </div>

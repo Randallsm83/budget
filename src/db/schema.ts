@@ -155,6 +155,7 @@ export const importConnections = pgTable('import_connections', {
     onDelete: 'set null',
   }),
   plaidItemId: text('plaid_item_id'),
+  plaidInstitutionId: text('plaid_institution_id'), // for duplicate Item detection
   plaidAccountId: text('plaid_account_id'), // Plaid-side account identifier for filtering
   accessTokenEncrypted: text('access_token_encrypted'),
   cursor: text('cursor'), // Plaid sync cursor
@@ -162,6 +163,8 @@ export const importConnections = pgTable('import_connections', {
   // Set true by webhook (PENDING_DISCONNECT, PENDING_EXPIRATION, ITEM_LOGIN_REQUIRED);
   // cleared to false after a successful sync.
   requiresRelink: boolean('requires_relink').notNull().default(false),
+  // Set true by NEW_ACCOUNTS_AVAILABLE webhook; cleared when user completes the add-accounts flow.
+  newAccountsAvailable: boolean('new_accounts_available').notNull().default(false),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
 

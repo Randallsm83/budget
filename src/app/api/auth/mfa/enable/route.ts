@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { users } from '@/db/schema'
+import { encrypt } from '@/lib/crypto'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -22,9 +23,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'Invalid code' }, { status: 400 })
   }
 
+  // Encrypt the secret before persisting — sensitive user data must not be
+  // stored in plaintext. Uses AES-256-GCM via the shared ENCRYPTION_KEY.
   await db
     .update(users)
-    .set({ mfaSecret: secret, mfaEnabled: true })
+    .set({ mfaSecret: encrypt(secret), mfaEnabled: true })
     .where(eq(users.id, session.user.id))
 
   return NextResponse.json({ success: true })

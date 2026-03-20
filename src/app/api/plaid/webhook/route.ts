@@ -43,12 +43,16 @@ export async function POST(req: NextRequest) {
 
     if (webhook_type === 'ITEM') {
       if (webhook_code === 'NEW_ACCOUNTS_AVAILABLE') {
-        // Plaid detected new bank accounts for this Item.
-        // Prompt the user to re-open Plaid Link in update mode to share them.
+        // Plaid detected new bank accounts for this Item — flag all connections so
+        // the user is prompted to open update mode with account_selection_enabled.
         console.log(
           `[plaid/webhook] NEW_ACCOUNTS_AVAILABLE for item ${item_id}` +
             (connection ? `, user ${connection.userId}` : ' (no local connection found)'),
         )
+        await db
+          .update(importConnections)
+          .set({ newAccountsAvailable: true })
+          .where(eq(importConnections.plaidItemId, item_id))
       }
 
       if (webhook_code === 'PENDING_DISCONNECT') {
