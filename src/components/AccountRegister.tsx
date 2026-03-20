@@ -642,28 +642,15 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ accountId: account.id }),
     })
+    setLoadingHistory(false)
     if (!res.ok) {
       const data = await res.json()
-      setSyncResult(`History refresh failed: ${data.error ?? 'unknown error'}`)
-      setLoadingHistory(false)
+      setSyncResult(`History request failed: ${data.error ?? 'unknown error'}`)
       return
     }
-    // Plaid loads history async — sync now to pick up whatever's ready,
-    // then auto-retry in 60s for the rest
-    setLoadingHistory(false)
-    setSyncResult('History refresh requested — syncing…')
-    const syncRes = await fetch('/api/plaid/sync', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId: account.id }),
-    })
-    const syncData = await syncRes.json()
-    if (syncRes.ok) {
-      setSyncResult(`+${syncData.added} added — more history may arrive in a few minutes, sync again to pick it up`)
-      router.refresh()
-    } else {
-      setSyncResult(`Sync after refresh failed: ${syncData.error ?? 'unknown'}`)
-    }
+    // Plaid loads history asynchronously in the background.
+    // The webhook (SYNC_UPDATES_AVAILABLE) will auto-sync transactions as they arrive.
+    setSyncResult('History requested — transactions will appear automatically as Plaid loads them (usually a few minutes)')
   }
 
   async function handleSync() {
@@ -803,12 +790,12 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
               <button
                 onClick={handleLoadHistory}
                 disabled={loadingHistory || syncing}
-                title="Ask Plaid to load up to 24 months of transaction history"
+                title="Request up to 24 months of transaction history from Plaid. Transactions sync automatically via webhook — no need to click Sync."
                 className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
                            font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
               >
                 <span className="sm:hidden">{loadingHistory ? '⏳' : '📜'}</span>
-                <span className="hidden sm:inline">{loadingHistory ? 'Loading…' : 'Load History'}</span>
+                <span className="hidden sm:inline">{loadingHistory ? 'Requesting…' : 'Full History'}</span>
               </button>
             )}
             {!isTracking && connection && newAccountsAvailable && !relinkRequired && (
