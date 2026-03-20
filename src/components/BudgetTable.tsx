@@ -283,8 +283,8 @@ function CategoryItemRow({ cat, month, error, onSaveName, onDelete, dragHandle }
               {error && <span className="ml-2 text-xs text-[#ce6f8f]">{error}</span>}
             </span>
             <Amount value={cat.balance} className="text-sm flex-shrink-0" />
-            <button onClick={() => setRenaming(true)} className="text-[#8a8fad] hover:text-[#b3a1e6] text-xs px-1 flex-shrink-0">✎</button>
-            <button onClick={onDelete} className="text-[#8a8fad] hover:text-[#ce6f8f] text-xs px-1 flex-shrink-0">✕</button>
+            <button onClick={() => setRenaming(true)} aria-label={`Rename ${cat.name}`} className="text-[#8a8fad] hover:text-[#b3a1e6] text-xs p-2 flex-shrink-0">✎</button>
+            <button onClick={onDelete} aria-label={`Delete ${cat.name}`} className="text-[#8a8fad] hover:text-[#ce6f8f] text-xs p-2 flex-shrink-0">✕</button>
           </div>
         )}
       </div>
@@ -316,8 +316,8 @@ function CategoryItemRow({ cat, month, error, onSaveName, onDelete, dragHandle }
         <Amount value={cat.activity} className="text-right text-sm pr-2" />
         <Amount value={cat.balance} className="text-right text-sm font-medium" />
         <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover/cat:opacity-100 transition-opacity">
-          <button onClick={() => setRenaming(true)} title="Rename" className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5">✎</button>
-          <button onClick={onDelete} title="Delete" className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-0.5">✕</button>
+          <button onClick={() => setRenaming(true)} title="Rename" aria-label={`Rename ${cat.name}`} className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1 py-0.5">✎</button>
+          <button onClick={onDelete} title="Delete" aria-label={`Delete ${cat.name}`} className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1 py-0.5">✕</button>
         </div>
       </div>
     </>
@@ -398,12 +398,13 @@ function GroupSection({ group, month, dragHandle }: {
 
   const actionBtns = (mobile: boolean) => (
     <div className={`flex items-center gap-0.5 flex-shrink-0 ${mobile ? '' : 'opacity-0 group-hover/grp:opacity-100 transition-opacity'}`}>
-      <button onClick={() => setRenaming(true)} title="Rename group" className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-0.5">✎</button>
+      <button onClick={() => setRenaming(true)} title="Rename group" aria-label={`Rename ${group.name}`} className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1 py-0.5">✎</button>
       <button
         onClick={handleDeleteGroup}
         title={group.categories.length > 0 ? 'Remove all categories first' : 'Delete group'}
+        aria-label={`Delete ${group.name}`}
         disabled={group.categories.length > 0}
-        className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-0.5 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[#8a8fad]"
+        className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1 py-0.5 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[#8a8fad]"
       >✕</button>
     </div>
   )

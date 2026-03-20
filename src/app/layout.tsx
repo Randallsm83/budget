@@ -18,6 +18,11 @@ export default async function RootLayout({
   const session = await auth()
   return (
     <html lang="en">
+      <head>
+        {/* Plaid Link SDK is loaded client-side from this domain */}
+        <link rel="preconnect" href="https://cdn.plaid.com" />
+        <link rel="dns-prefetch" href="https://cdn.plaid.com" />
+      </head>
       <body className="antialiased">
         <SessionProvider session={session}>{children}</SessionProvider>
         <Analytics />
