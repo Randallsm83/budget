@@ -71,6 +71,30 @@ npm run dev
 
 Open [http://localhost:3000](http://localhost:3000) and log in with your seed credentials.
 
+## Plaid setup requirements
+
+If you want to use bank sync, the following must be completed before going to production:
+
+**Core workflows**
+- Investments, Liabilities, Transactions, and Enrich sync routes are implemented at `src/app/api/plaid/`
+- Webhook auto-sync is handled at `/api/plaid/webhook` — set `PLAID_WEBHOOK_URL` and run `POST /api/plaid/update-webhooks` once to register it on existing Items
+
+**Update mode**
+- Re-authentication prompts (`PlaidRelink`) fire automatically when `PENDING_DISCONNECT`, `PENDING_EXPIRATION`, or `ITEM_LOGIN_REQUIRED` webhooks are received
+- New account prompts (`PlaidNewAccounts`) fire on `NEW_ACCOUNTS_AVAILABLE`
+- Global banners (`RelinkBanner`, `NewAccountsBanner`) surface these from any page
+
+**User offboarding**
+- `POST /api/user/delete` calls `/item/remove` for all Plaid Items before deleting the user (accessible via Security Settings → Delete Account)
+- The "Disconnect bank" link on any account page removes the Item and deletes Plaid-fetched data while keeping transactions
+
+**Production checklist**
+- `PLAID_ENV=production`, `PLAID_CLIENT_ID`, `PLAID_SECRET`, and `ENCRYPTION_KEY` must all be set — the app throws at startup if any are missing
+- `PLAID_REDIRECT_URI` must be registered in the [Plaid Dashboard](https://dashboard.plaid.com) for OAuth institutions
+- `PLAID_WEBHOOK_URL` must be a publicly reachable HTTPS URL
+- Optionally set `NEXT_PUBLIC_PRIVACY_URL` to show a privacy policy link in the pre-Link consent modal
+- Run `npm run test:offboarding` (requires `PLAID_SANDBOX_SECRET`) to verify `/item/remove` works end-to-end before launch
+
 ## Database commands
 
 ```bash
