@@ -6,6 +6,7 @@ import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -43,11 +44,11 @@ export async function POST(req: NextRequest) {
         ? { webhook: process.env.PLAID_WEBHOOK_URL }
         : {}),
     })
+    plaidLog('info', { route: 'plaid/update-link-token', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, requestId: res.data.request_id })
     return NextResponse.json({ link_token: res.data.link_token })
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : JSON.stringify(err))
-    console.error('[plaid/update-link-token]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/update-link-token', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 }

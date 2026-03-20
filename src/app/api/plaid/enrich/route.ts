@@ -8,6 +8,7 @@ import { db } from '@/db'
 import { accounts, categories, payeeRules, transactions } from '@/db/schema'
 import { normalizePayee } from '@/lib/payee'
 import { getPlaidCategoryHints } from '@/lib/plaidCategories'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 const BATCH_SIZE = 100
 
@@ -139,14 +140,9 @@ export async function POST(req: NextRequest) {
       }
     }
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData
-      ? JSON.stringify(axiosData)
-      : err instanceof Error
-        ? err.message
-        : String(err)
-    console.error('[plaid/enrich]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/enrich', userId, accountId, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 
   return NextResponse.json({ enriched: enrichedCount, categorized: categorizedCount })

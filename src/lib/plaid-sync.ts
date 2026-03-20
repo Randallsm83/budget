@@ -6,6 +6,7 @@ import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { normalizePayee } from '@/lib/payee'
 import { getPlaidCategoryHints } from '@/lib/plaidCategories'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 const TRANSFER_RE = /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i
 
@@ -36,9 +37,11 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
   const modified: PlaidTransaction[] = []
   const removed: RemovedTransaction[] = []
 
+  let lastRequestId: string | undefined
   try {
     while (hasMore) {
       const res = await plaidClient.transactionsSync({ access_token: accessToken, cursor })
+      lastRequestId = res.data.request_id
       const filter = plaidAccountId
         ? (t: PlaidTransaction) => t.account_id === plaidAccountId
         : () => true
@@ -49,8 +52,9 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
       hasMore = res.data.has_more
     }
   } catch (err: unknown) {
-    const code = (err as { response?: { data?: { error_code?: string } } })?.response?.data?.error_code
-    if (code === 'ITEM_LOGIN_REQUIRED') {
+    const errFields = extractPlaidError(err)
+    plaidLog('error', { route: 'plaid-sync/transactions', userId, accountId, plaidItemId: connection.plaidItemId ?? undefined, ...errFields })
+    if (errFields.errorCode === 'ITEM_LOGIN_REQUIRED') {
       if (connection.plaidItemId) {
         await db.update(importConnections)
           .set({ requiresRelink: true })
@@ -58,8 +62,7 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
       }
       return { requiresRelink: true }
     }
-    const msg = err instanceof Error ? err.message : String(err)
-    return { error: msg }
+    return { error: errFields.errorMessage ?? 'Unknown error' }
   }
 
   // Load payee rules and categories for auto-categorisation
@@ -137,6 +140,7 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
   }
   await db.update(importConnections).set({ cursor, lastSyncedAt: new Date() }).where(eq(importConnections.id, connection.id))
 
+  plaidLog('info', { route: 'plaid-sync/transactions', userId, accountId, plaidItemId: connection.plaidItemId ?? undefined, requestId: lastRequestId, added: added.length, modified: modified.length, removed: removed.length, firstSync: isFirstSync })
   return { added: added.length, modified: modified.length, removed: removed.length, firstSync: isFirstSync }
 }
 

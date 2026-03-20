@@ -8,7 +8,10 @@ A personal budgeting app built on envelope budgeting principles (YNAB-style). As
 - Account register — manual transactions, CSV import, or Plaid bank sync
 - Payee auto-categorization — learns your corrections and applies them to future imports
 - TOTP two-factor authentication
-- Plaid integration — link bank accounts and sync transactions with cursor-based incremental updates
+- Plaid integration — link bank accounts, auto-sync via webhooks, cursor-based incremental updates
+- YNAB-style CC Payment tracking — spending auto-funds payment buckets, card balance shown live
+- Transfer detection — inter-account transfers excluded from budget math automatically
+- Drag-and-drop reordering for budget groups, categories, and sidebar accounts
 
 ## Tech stack
 
@@ -40,6 +43,7 @@ cp .env.local.example .env.local
 | `PLAID_CLIENT_ID` | Plaid client ID (optional — only needed for bank sync) |
 | `PLAID_SECRET` | Plaid secret (optional) |
 | `PLAID_ENV` | `sandbox`, `development`, or `production` |
+| `PLAID_WEBHOOK_URL` | Public URL for Plaid webhooks, e.g. `https://yourdomain.com/api/plaid/webhook` |
 | `ENCRYPTION_KEY` | 64 hex chars (32 bytes) for AES-256-GCM encryption of Plaid tokens |
 
 3. Push the schema to your database:
@@ -70,4 +74,26 @@ npm run db:generate   # generate migration files after schema changes
 npm run db:push       # push schema directly to DB (dev shortcut, skips migrations)
 npm run db:studio     # open Drizzle Studio GUI
 npm run db:seed       # create initial user from SEED_USER_* env vars
+```
+
+## Testing
+
+```bash
+npm test              # run all tests (Vitest)
+npm run test:watch    # watch mode
+npm run test:coverage # coverage report
+```
+
+Test files live in `src/lib/__tests__/`. Coverage includes budget math utilities and CC payment calculation logic.
+
+## Development workflow
+
+Main branch is protected — all changes go through PRs:
+
+```bash
+git checkout -b feat/my-feature
+# make changes
+git push origin feat/my-feature
+gh pr create --fill
+gh pr merge --squash
 ```
