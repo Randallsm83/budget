@@ -6,6 +6,7 @@ import { encrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { accounts, importConnections } from '@/db/schema'
 import { syncInvestmentHoldings, syncLiabilityDetails } from '@/lib/plaid-sync'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 function mapType(account: AccountBase): string {
   if (account.type === 'credit') return 'credit_card'
@@ -37,6 +38,7 @@ export async function POST(req: NextRequest) {
     const exchangeRes = await plaidClient.itemPublicTokenExchange({ public_token })
     const accessToken = exchangeRes.data.access_token
     const plaidItemId = exchangeRes.data.item_id
+    plaidLog('info', { route: 'plaid/create-accounts', userId, plaidItemId, requestId: exchangeRes.data.request_id })
     const accessTokenEncrypted = encrypt(accessToken)
 
     const accountsRes = await plaidClient.accountsGet({ access_token: accessToken })
@@ -72,25 +74,25 @@ export async function POST(req: NextRequest) {
         try {
           await syncInvestmentHoldings(userId, newAccount.id, pa.account_id, accessToken)
         } catch (err) {
-          console.warn('[create-accounts] investments bootstrap failed:', err)
+          plaidLog('warn', { route: 'plaid/create-accounts', userId, plaidItemId, accountId: newAccount.id, plaidAccountId: pa.account_id, msg: 'investments bootstrap failed', ...extractPlaidError(err) })
         }
       }
       if (type === 'loan' || type === 'credit_card') {
         try {
           await syncLiabilityDetails(userId, newAccount.id, pa.account_id, accessToken)
         } catch (err) {
-          console.warn('[create-accounts] liabilities bootstrap failed:', err)
+          plaidLog('warn', { route: 'plaid/create-accounts', userId, plaidItemId, accountId: newAccount.id, plaidAccountId: pa.account_id, msg: 'liabilities bootstrap failed', ...extractPlaidError(err) })
         }
       }
 
       created.push(newAccount)
     }
 
+    plaidLog('info', { route: 'plaid/create-accounts', userId, plaidItemId, createdCount: created.length })
     return NextResponse.json({ success: true, accounts: created })
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : JSON.stringify(err))
-    console.error('[plaid/create-accounts]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/create-accounts', userId, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 }

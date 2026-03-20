@@ -5,6 +5,7 @@ import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -28,12 +29,12 @@ export async function POST(req: NextRequest) {
     // Tells Plaid to kick off an async historical pull for this Item.
     // The new transactions won't appear immediately — they'll show up on
     // the next transactionsSync call (usually within a few minutes).
-    await plaidClient.transactionsRefresh({ access_token: accessToken })
+    const refreshRes = await plaidClient.transactionsRefresh({ access_token: accessToken })
+    plaidLog('info', { route: 'plaid/refresh', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, requestId: refreshRes.data.request_id })
     return NextResponse.json({ success: true })
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : String(err))
-    console.error('[plaid/refresh]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/refresh', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 }

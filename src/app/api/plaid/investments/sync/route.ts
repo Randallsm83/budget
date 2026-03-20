@@ -5,6 +5,7 @@ import { db } from '@/db'
 import { importConnections } from '@/db/schema'
 import { decrypt } from '@/lib/crypto'
 import { syncInvestmentHoldings } from '@/lib/plaid-sync'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -26,12 +27,11 @@ export async function POST(req: NextRequest) {
 
     const accessToken = decrypt(connection.accessTokenEncrypted)
     const result = await syncInvestmentHoldings(userId, accountId, connection.plaidAccountId, accessToken)
-
+    plaidLog('info', { route: 'plaid/investments/sync', userId, accountId, plaidItemId: connection.plaidItemId ?? undefined, plaidAccountId: connection.plaidAccountId, synced: result.synced })
     return NextResponse.json(result)
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : JSON.stringify(err))
-    console.error('[plaid/investments/sync]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/investments/sync', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, plaidAccountId: connection.plaidAccountId ?? undefined, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 }

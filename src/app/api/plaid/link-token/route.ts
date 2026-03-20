@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { CountryCode, Products } from 'plaid'
 import { auth } from '@/auth'
 import { plaidClient } from '@/lib/plaid'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST() {
   const session = await auth()
@@ -22,11 +23,11 @@ export async function POST() {
         ? { webhook: process.env.PLAID_WEBHOOK_URL }
         : {}),
     })
+    plaidLog('info', { route: 'plaid/link-token', userId: session.user.id, requestId: response.data.request_id })
     return NextResponse.json({ link_token: response.data.link_token })
   } catch (err: unknown) {
-    const axiosData = (err as { response?: { data?: unknown } })?.response?.data
-    const msg = axiosData ? JSON.stringify(axiosData) : (err instanceof Error ? err.message : JSON.stringify(err))
-    console.error('[plaid/link-token]', msg)
-    return NextResponse.json({ error: msg }, { status: 500 })
+    plaidLog('error', { route: 'plaid/link-token', userId: session.user.id, ...extractPlaidError(err) })
+    const data = (err as { response?: { data?: unknown } })?.response?.data
+    return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
 }

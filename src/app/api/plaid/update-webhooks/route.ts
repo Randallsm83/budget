@@ -5,6 +5,7 @@ import { plaidClient } from '@/lib/plaid'
 import { decrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 // POST /api/plaid/update-webhooks
 // Updates the webhook URL on every Plaid Item for this user.
@@ -26,11 +27,13 @@ export async function POST() {
     if (!conn.accessTokenEncrypted) continue
     try {
       const accessToken = decrypt(conn.accessTokenEncrypted)
-      await plaidClient.itemWebhookUpdate({ access_token: accessToken, webhook: webhookUrl })
+      const wRes = await plaidClient.itemWebhookUpdate({ access_token: accessToken, webhook: webhookUrl })
+      plaidLog('info', { route: 'plaid/update-webhooks', userId: session.user.id, plaidItemId: conn.plaidItemId ?? undefined, accountId: conn.accountId ?? undefined, requestId: wRes.data.request_id })
       results.push({ accountId: conn.accountId, status: 'updated' })
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err)
-      results.push({ accountId: conn.accountId, status: `error: ${msg}` })
+      const errFields = extractPlaidError(err)
+      plaidLog('error', { route: 'plaid/update-webhooks', userId: session.user.id, plaidItemId: conn.plaidItemId ?? undefined, accountId: conn.accountId ?? undefined, ...errFields })
+      results.push({ accountId: conn.accountId, status: `error: ${errFields.errorMessage ?? 'unknown'}` })
     }
   }
 

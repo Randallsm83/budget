@@ -5,6 +5,7 @@ import { plaidClient } from '@/lib/plaid'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -13,9 +14,16 @@ export async function POST(req: NextRequest) {
   const { public_token, accountId, institutionId } =
     (await req.json()) as { public_token: string; accountId: string; institutionId?: string }
 
-  const response = await plaidClient.itemPublicTokenExchange({ public_token })
+  let response
+  try {
+    response = await plaidClient.itemPublicTokenExchange({ public_token })
+  } catch (err) {
+    plaidLog('error', { route: 'plaid/exchange-token', userId: session.user.id, accountId, institutionId, ...extractPlaidError(err) })
+    return NextResponse.json({ error: 'Failed to exchange token' }, { status: 500 })
+  }
   const accessToken = response.data.access_token
   const plaidItemId = response.data.item_id
+  const requestId = response.data.request_id
   const accessTokenEncrypted = encrypt(accessToken)
 
   // ---------------------------------------------------------------------------
@@ -42,6 +50,7 @@ export async function POST(req: NextRequest) {
     if (existingInstitutionConn && existingInstitutionConn.plaidItemId !== plaidItemId) {
       // Duplicate: remove the newly exchanged token so we are not billed twice
       try { await plaidClient.itemRemove({ access_token: accessToken }) } catch { /* ignore */ }
+      plaidLog('warn', { route: 'plaid/exchange-token', userId: session.user.id, accountId, institutionId, plaidItemId, requestId, msg: 'duplicate Item detected — removed new token' })
       return NextResponse.json(
         { duplicate: true, message: 'This bank is already connected to one of your accounts.' },
         { status: 409 },
@@ -72,5 +81,6 @@ export async function POST(req: NextRequest) {
     })
   }
 
+  plaidLog('info', { route: 'plaid/exchange-token', userId: session.user.id, accountId, plaidItemId, institutionId, requestId })
   return NextResponse.json({ success: true })
 }
