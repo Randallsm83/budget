@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
     plaidLog('info', { route: 'plaid/liabilities/sync', userId, accountId, plaidItemId: connection.plaidItemId ?? undefined, plaidAccountId: connection.plaidAccountId, synced: result.synced, liabilityType: result.liabilityType })
     return NextResponse.json(result)
   } catch (err: unknown) {
-    plaidLog('error', { route: 'plaid/liabilities/sync', userId: session.user.id, accountId, plaidItemId: connection.plaidItemId ?? undefined, plaidAccountId: connection.plaidAccountId ?? undefined, ...extractPlaidError(err) })
+    plaidLog('error', { route: 'plaid/liabilities/sync', userId: session.user.id, ...extractPlaidError(err) })
     const data = (err as { response?: { data?: unknown } })?.response?.data
     return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }

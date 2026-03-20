@@ -5,6 +5,7 @@ import { plaidClient } from '@/lib/plaid'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/db'
 import { importConnections } from '@/db/schema'
+import { syncTransactions } from '@/lib/plaid-sync'
 import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
 export async function POST(req: NextRequest) {
@@ -82,5 +83,20 @@ export async function POST(req: NextRequest) {
   }
 
   plaidLog('info', { route: 'plaid/exchange-token', userId: session.user.id, accountId, plaidItemId, institutionId, requestId })
+
+  // Auto-sync immediately so the account register isn't empty after linking.
+  // The initial sync covers ~30 days; the webhook will pull full history as
+  // Plaid completes the background historical pull.
+  const freshConn = await db.query.importConnections.findFirst({
+    where: and(
+      eq(importConnections.userId, session.user.id),
+      eq(importConnections.accountId, accountId),
+    ),
+  })
+  if (freshConn) {
+    const syncResult = await syncTransactions(freshConn)
+    plaidLog('info', { route: 'plaid/exchange-token/auto-sync', userId: session.user.id, accountId, ...syncResult })
+  }
+
   return NextResponse.json({ success: true })
 }

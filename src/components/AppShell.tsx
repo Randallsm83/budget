@@ -8,6 +8,7 @@ import { NewAccountsBanner } from './NewAccountsBanner'
 export function AppShell({
   sidebarContent,
   relinkAccounts,
+  newAccountsItems,
   children,
 }: {
   sidebarContent: React.ReactNode
