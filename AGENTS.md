@@ -21,21 +21,25 @@ npm run lint         # ESLint
 npm run db:generate  # generate Drizzle migration files (reads .env.local)
 npm run db:push      # push schema changes directly to DB (reads .env.local)
 npm run db:studio    # open Drizzle Studio GUI (reads .env.local)
-npm run db:seed      # seed initial user from .env.local SEED_USER_* vars
-npm test             # run Vitest unit tests
-npm run test:watch   # Vitest watch mode
+npm run db:seed              # seed initial user from .env.local SEED_USER_* vars
+npm test                     # run Vitest unit tests
+npm run test:watch           # Vitest watch mode
+npm run test:offboarding     # Plaid /item/remove integration test (sandbox only)
 ```
 
-All `db:*` scripts use `dotenv -e .env.local` to inject credentials. Test files live in `src/lib/__tests__/`.
+All `db:*` scripts use `dotenv -e .env.local` to inject credentials. Unit tests live in `src/lib/__tests__/`. Integration tests in `scripts/`.
 
 ## Environment setup
 Copy `.env.local.example` to `.env.local` and fill in:
 - `DATABASE_URL` — Neon/Postgres connection string
 - `AUTH_SECRET` — NextAuth secret (generate: `node -e "console.log(require('crypto').randomBytes(32).toString('base64url'))"`)
 - `NEXTAUTH_URL` — e.g. `http://localhost:3000`
-- `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` — only needed if using Plaid
+- `PLAID_CLIENT_ID`, `PLAID_SECRET`, `PLAID_ENV` — only needed if using Plaid; set `PLAID_ENV=production` for production
+- `PLAID_SANDBOX_SECRET` — sandbox-only secret; used by `test:offboarding` script only
 - `PLAID_WEBHOOK_URL` — public URL for Plaid webhooks, e.g. `https://yourdomain.com/api/plaid/webhook`
-- `ENCRYPTION_KEY` — 64 hex chars (32 bytes) for AES-256-GCM encryption of Plaid access tokens
+- `PLAID_REDIRECT_URI` — OAuth redirect URI registered in Plaid dashboard
+- `ENCRYPTION_KEY` — 64 hex chars (32 bytes) for AES-256-GCM encryption of Plaid tokens **and** MFA secrets
+- `NEXT_PUBLIC_PRIVACY_URL` — optional; shown in the pre-Link consent modal
 
 ## Code structure
 - `src/app/(app)/` — protected app pages: `budget/`, `accounts/`, `settings/security/`
@@ -44,10 +48,22 @@ Copy `.env.local.example` to `.env.local` and fill in:
 - `src/lib/` — pure server-side utilities
   - `actions.ts` — all Next.js Server Actions (mutations)
   - `budget.ts` — pure budget math engine + display helpers
-  - `plaid.ts` — Plaid client singleton
+  - `plaid.ts` — Plaid client singleton; validates required env vars on non-sandbox startup
   - `plaid-sync.ts` — core transaction sync logic shared by the sync route and webhook handler
-  - `crypto.ts` — AES-256-GCM encrypt/decrypt for Plaid tokens
+  - `plaid-item.ts` — `removeItem()` utility: calls `/item/remove`, swallows already-removed errors
+  - `plaid-logger.ts` — structured backend logging; every Plaid API call logs `request_id` for support
+  - `plaid-analytics.ts` — frontend Link conversion logging via `onEvent`/`onExit` callbacks
+  - `crypto.ts` — AES-256-GCM encrypt/decrypt for Plaid tokens and MFA secrets
   - `payee.ts` — payee name normalization for auto-categorization
+- `src/components/`
+  - `PlaidLink.tsx` — initial bank connection; shows `PlaidConsentModal` before opening Link
+  - `PlaidRelink.tsx` — update mode re-authentication for `ITEM_LOGIN_REQUIRED` / expired connections
+  - `PlaidNewAccounts.tsx` — update mode with `account_selection_enabled=true` for `NEW_ACCOUNTS_AVAILABLE`
+  - `PlaidConsentModal.tsx` — pre-Link consent/notice UI shown before any initial connection
+  - `RelinkBanner.tsx` — global amber banner shown when any account has `requiresRelink=true`
+  - `NewAccountsBanner.tsx` — global cyan banner shown when any account has `newAccountsAvailable=true`
+- `scripts/` — standalone scripts (not Next.js)
+  - `test-offboarding.ts` — integration test for `/item/remove` flow against Plaid sandbox
 - `src/components/AccountsNav.tsx` — client component for sortable sidebar account list (DnD per section)
 - `src/db/` — Drizzle schema (`schema.ts`), lazy DB singleton (`index.ts`), seed script
 - `src/proxy.ts` — Next.js middleware (note: non-standard filename; routes defined in its `config.matcher`)
@@ -127,6 +143,43 @@ Without this, DB mutations (e.g. deleting a group) may not be reflected on the n
 
 ### Plaid webhook auto-sync
 The webhook handler at `src/app/api/plaid/webhook/route.ts` calls `syncTransactions()` from `src/lib/plaid-sync.ts` for every connection on an Item when `TRANSACTIONS/SYNC_UPDATES_AVAILABLE` fires. This replaces manual syncing for all connected accounts. The `PLAID_WEBHOOK_URL` env var must be set for new bank connections to register the webhook; existing connections must be updated via `POST /api/plaid/update-webhooks`.
+
+### Plaid update mode
+Three flag columns on `importConnections` drive update mode prompts:
+- `requiresRelink` — set by `PENDING_DISCONNECT`, `PENDING_EXPIRATION`, `ITEM_LOGIN_REQUIRED` webhooks; cleared on successful sync or `clearRelinkRequired()` server action. Shows amber banner (`RelinkBanner`) + `PlaidRelink` button replacing the Sync button.
+- `newAccountsAvailable` — set by `NEW_ACCOUNTS_AVAILABLE` webhook; cleared by `clearNewAccountsAvailable()`. Shows cyan banner (`NewAccountsBanner`) + `PlaidNewAccounts` button alongside Sync.
+- `LOGIN_REPAIRED` webhook clears `requiresRelink` automatically when another app repairs the Item.
+
+Update mode link tokens are fetched from `/api/plaid/update-link-token`. Pass `{ accountSelectionEnabled: true }` in the body to get a token with `update.account_selection_enabled=true` (used by `PlaidNewAccounts`).
+
+### Plaid /item/remove and data retention
+`removeItem(accessTokenEncrypted)` in `src/lib/plaid-item.ts` calls Plaid's `/item/remove` and swallows errors (item may already be gone). It is called:
+- In `deleteAccount()` before the account is deleted (only if no other account shares the `plaidItemId`)
+- In `disconnectPlaidConnection(accountId)` server action: removes the whole Item, deletes Plaid-fetched data (holdings, liabilities), and removes all `importConnections` rows for the Item
+- In `POST /api/user/delete` for user offboarding: removes all Items then deletes the user (data cascades)
+
+When `disconnectPlaidConnection` is called, holdings and liability details are explicitly deleted (they are Plaid-sourced data with no business need without a connection). Transactions are kept as the user's financial history.
+
+### Plaid logging
+All Plaid API calls log structured JSON via `plaidLog()` from `src/lib/plaid-logger.ts`. Every entry includes `route`, `userId`, `plaidItemId`, and — critically — `requestId` from the Plaid API response. Filter logs on `[plaid]` in any log platform. The `requestId` is required when filing a Plaid support ticket.
+
+Frontend Link events (`OPEN`, `HANDOFF`, `EXIT`, `SELECT_INSTITUTION`, etc.) are logged via `logLinkEvent()` / `logLinkExit()` from `src/lib/plaid-analytics.ts`. These are wired into `onEvent`/`onExit` in all three Link components.
+
+### Plaid duplicate Item detection
+When a user connects a bank, the `institutionId` from `onSuccess` metadata is sent to `/api/plaid/exchange-token`. After exchange, if the user already has a connection with the same `plaidInstitutionId` but a **different** `item_id`, it's a duplicate: the new token is immediately removed and a 409 is returned. Same `item_id` = re-linking the same Item intentionally (allowed). The `plaidInstitutionId` is stored on every connection row.
+
+### Plaid multi-product configuration
+The link token uses:
+- `products: [Transactions]` — required; restricts to institutions supporting Transactions
+- `additional_consented_products: [Investments, Liabilities]` — user consents during Link but billing is deferred until the endpoints are first called; avoids charges for users who never trigger investment/liability syncs
+
+Do **not** move Investments or Liabilities to `optional_products` — that bills on Item creation even if the user only has a checking account.
+
+### Plaid security
+- Access tokens: encrypted with AES-256-GCM immediately on receipt; plaintext never stored
+- MFA secrets: also encrypted with AES-256-GCM; `resolveMfaSecret()` in `auth.ts` and the disable route handles backward-compat with any pre-existing plaintext secrets
+- No `/sandbox/` endpoints are called in the app itself; they only appear in `scripts/test-offboarding.ts`
+- Production env validation in `plaid.ts` throws at startup if `PLAID_CLIENT_ID`, `PLAID_SECRET`, or `ENCRYPTION_KEY` are missing when `PLAID_ENV != sandbox`
 
 ### Git workflow
 Main branch is protected (PRs required, enforce_admins enabled). Always work on a feature branch:

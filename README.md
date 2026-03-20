@@ -9,6 +9,8 @@ A personal budgeting app built on envelope budgeting principles (YNAB-style). As
 - Payee auto-categorization — learns your corrections and applies them to future imports
 - TOTP two-factor authentication
 - Plaid integration — link bank accounts, auto-sync via webhooks, cursor-based incremental updates
+- Plaid production-ready — pre-Link consent UI, duplicate Item detection, `/item/remove` on disconnect and offboarding, structured logging with `request_id`
+- Update mode — automatic prompts to re-authenticate expired bank connections or add newly detected accounts
 - YNAB-style CC Payment tracking — spending auto-funds payment buckets, card balance shown live
 - Transfer detection — inter-account transfers excluded from budget math automatically
 - Drag-and-drop reordering for budget groups, categories, and sidebar accounts
@@ -44,7 +46,9 @@ cp .env.local.example .env.local
 | `PLAID_SECRET` | Plaid secret (optional) |
 | `PLAID_ENV` | `sandbox`, `development`, or `production` |
 | `PLAID_WEBHOOK_URL` | Public URL for Plaid webhooks, e.g. `https://yourdomain.com/api/plaid/webhook` |
-| `ENCRYPTION_KEY` | 64 hex chars (32 bytes) for AES-256-GCM encryption of Plaid tokens |
+| `ENCRYPTION_KEY` | 64 hex chars (32 bytes) for AES-256-GCM encryption of Plaid tokens and MFA secrets |
+| `PLAID_SANDBOX_SECRET` | Plaid sandbox secret (optional — only for `npm run test:offboarding`) |
+| `NEXT_PUBLIC_PRIVACY_URL` | URL to your privacy policy, shown in the pre-Link consent modal (optional) |
 
 3. Push the schema to your database:
 
@@ -79,12 +83,13 @@ npm run db:seed       # create initial user from SEED_USER_* env vars
 ## Testing
 
 ```bash
-npm test              # run all tests (Vitest)
-npm run test:watch    # watch mode
-npm run test:coverage # coverage report
+npm test                  # run all tests (Vitest)
+npm run test:watch        # watch mode
+npm run test:coverage     # coverage report
+npm run test:offboarding  # Plaid /item/remove integration test (uses sandbox credentials)
 ```
 
-Test files live in `src/lib/__tests__/`. Coverage includes budget math utilities and CC payment calculation logic.
+Unit tests live in `src/lib/__tests__/`. The offboarding integration test (`scripts/test-offboarding.ts`) requires `PLAID_CLIENT_ID` and `PLAID_SANDBOX_SECRET` in `.env.local` and exercises the full `/item/remove` flow against the Plaid sandbox.
 
 ## Development workflow
 

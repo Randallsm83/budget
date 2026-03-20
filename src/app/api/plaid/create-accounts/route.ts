@@ -91,7 +91,7 @@ export async function POST(req: NextRequest) {
     plaidLog('info', { route: 'plaid/create-accounts', userId, plaidItemId, createdCount: created.length })
     return NextResponse.json({ success: true, accounts: created })
   } catch (err: unknown) {
-    plaidLog('error', { route: 'plaid/create-accounts', userId, ...extractPlaidError(err) })
+    plaidLog('error', { route: 'plaid/create-accounts', userId: session.user.id, ...extractPlaidError(err) })
     const data = (err as { response?: { data?: unknown } })?.response?.data
     return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }
