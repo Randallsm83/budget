@@ -106,29 +106,37 @@ export function formatMonthDisplay(month: string): string {
 // Bank brand colors
 // ---------------------------------------------------------------------------
 
-const BANK_COLORS: [RegExp, string][] = [
-  [/chase/i,                          '#1164B4'], // Chase blue
-  [/amex|american\s?express/i,        '#016FD0'], // Amex blue
-  [/citi(bank)?/i,                    '#004A97'], // Citi blue
-  [/wells\s?fargo/i,                  '#D71E28'], // Wells Fargo red
-  [/bank\s?of\s?america|bofa/i,       '#E31837'], // BofA red
-  [/capital\s?one/i,                  '#C42A17'], // Capital One red
-  [/discover/i,                       '#F76107'], // Discover orange
-  [/us\s?bank/i,                      '#0069AA'], // US Bank blue
-  [/barclays/i,                       '#00AEEF'], // Barclays cyan
-  [/synchrony/i,                      '#5B2D86'], // Synchrony purple
-  [/ally/i,                           '#7A2487'], // Ally purple
-  [/navy\s?fed|nfcu/i,                '#002868'], // Navy Federal navy
-  [/pnc/i,                            '#F58025'], // PNC orange
-  [/td\s?bank|toronto-dominion/i,     '#34B233'], // TD green
+// [pattern, color, 2-letter abbrev]
+const BANK_COLORS: [RegExp, string, string][] = [
+  [/chase/i,                          '#1164B4', 'CH'], // Chase blue
+  [/amex|american\s?express/i,        '#B8860B', 'AX'], // Amex gold (gold card)
+  [/citi(bank)?/i,                    '#C41E3A', 'CI'], // Citi red arc
+  [/wells\s?fargo/i,                  '#D71E28', 'WF'], // Wells Fargo red
+  [/bank\s?of\s?america|bofa/i,       '#E31837', 'BA'], // BofA red
+  [/capital\s?one/i,                  '#C42A17', 'C1'], // Capital One red
+  [/discover/i,                       '#F76107', 'DS'], // Discover orange
+  [/us\s?bank/i,                      '#0069AA', 'US'], // US Bank blue
+  [/barclays/i,                       '#00AEEF', 'BX'], // Barclays cyan
+  [/synchrony/i,                      '#5B2D86', 'SY'], // Synchrony purple
+  [/ally/i,                           '#7A2487', 'AL'], // Ally purple
+  [/navy\s?fed|nfcu/i,                '#002868', 'NF'], // Navy Federal navy
+  [/pnc/i,                            '#F58025', 'PN'], // PNC orange
+  [/td\s?bank|toronto-dominion/i,     '#34B233', 'TD'], // TD green
 ]
+
+export interface BankBrand { color: string; abbrev: string }
+
+/** Return brand color + 2-letter abbreviation for a card name. */
+export function getBankBrand(name: string): BankBrand {
+  for (const [pattern, color, abbrev] of BANK_COLORS) {
+    if (pattern.test(name)) return { color, abbrev }
+  }
+  return { color: '#42b3c2', abbrev: '??' }
+}
 
 /** Return a hex brand color for a card name, or a default teal. */
 export function getBankColor(name: string): string {
-  for (const [pattern, color] of BANK_COLORS) {
-    if (pattern.test(name)) return color
-  }
-  return '#42b3c2' // default
+  return getBankBrand(name).color
 }
 
 /** Return the current month as 'YYYY-MM'. */
