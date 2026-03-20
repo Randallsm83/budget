@@ -28,7 +28,7 @@ import {
   reorderGroups,
   reorderCategories,
 } from '@/lib/actions'
-import { formatMoney, parseMoney } from '@/lib/budget'
+import { formatMoney, parseMoney, getBankColor } from '@/lib/budget'
 
 export interface CategoryRow {
   id: string
@@ -535,6 +535,22 @@ function AddGroupRow() {
 // Main table
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
+// Mini bank card SVG icon
+// ---------------------------------------------------------------------------
+function BankCard({ name }: { name: string }) {
+  const color = getBankColor(name)
+  return (
+    <svg width="20" height="14" viewBox="0 0 20 14" fill="none" aria-hidden className="flex-shrink-0">
+      <rect x="0.5" y="0.5" width="19" height="13" rx="2" fill={color} fillOpacity="0.18" stroke={color} strokeOpacity="0.6" />
+      {/* magnetic stripe */}
+      <rect x="0" y="3" width="20" height="2.5" fill={color} fillOpacity="0.35" />
+      {/* chip */}
+      <rect x="3" y="7" width="4.5" height="3.5" rx="0.5" fill={color} fillOpacity="0.7" />
+    </svg>
+  )
+}
+
+// ---------------------------------------------------------------------------
 // CC Payment group — read-only, system-managed section
 // ---------------------------------------------------------------------------
 function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
@@ -554,14 +570,14 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
           <div key={cat.id}>
             {/* Mobile */}
             <div className="sm:hidden flex items-center gap-2 px-4 py-2.5 border-b border-[#1f2039]">
-              <span className="text-xs text-[#42b3c2] flex-shrink-0">💳</span>
+              <BankCard name={cat.name} />
               <span className="text-sm text-[#ecf0f1] flex-1 truncate">{cat.name}</span>
               <Amount value={cat.balance} className="text-sm flex-shrink-0" />
             </div>
             {/* Desktop */}
             <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-3 sm:px-6 py-1.5
                             border-b border-[#1f2039] items-center">
-              <span className="text-xs text-[#42b3c2] flex-shrink-0">💳</span>
+              <BankCard name={cat.name} />
               <span className="text-sm text-[#ecf0f1] truncate" title="Auto-managed — funded by CC spending">{cat.name}</span>
               <span className="text-right text-sm text-[#42b3c2] tabular-nums pr-2" title="Auto-funded from CC spending this month">
                 {formatMoney(cat.budgeted)}
