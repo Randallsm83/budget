@@ -28,6 +28,20 @@ body {
   font-family: ui-sans-serif, system-ui, -apple-system, 'Segoe UI', sans-serif;
 }
 
+/* View Transitions — smooth cross-page navigation */
+@view-transition {
+  navigation: auto;
+}
+
+::view-transition-old(root) {
+  animation: 120ms ease-out both fade-out;
+}
+::view-transition-new(root) {
+  animation: 120ms ease-in both fade-in;
+}
+@keyframes fade-out { from { opacity: 1 } to { opacity: 0 } }
+@keyframes fade-in  { from { opacity: 0 } to { opacity: 1 } }
+
 /* Scrollbar styling */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: #1a1b2e; }

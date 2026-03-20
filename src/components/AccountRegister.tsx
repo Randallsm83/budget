@@ -408,7 +408,8 @@ function TransactionRow({
     <button
       onClick={handleToggleTransfer}
       title={localIsTransfer ? 'Unmark as transfer' : 'Mark as transfer (excludes from budget)'}
-      className={`text-xs px-0.5 transition-colors flex-shrink-0 ${
+      aria-label={localIsTransfer ? 'Unmark as transfer' : 'Mark as transfer'}
+      className={`text-xs px-1 py-1 transition-colors flex-shrink-0 ${
         localIsTransfer ? 'text-[#42b3c2] hover:text-[#8a8fad]' : 'text-[#3a3b58] hover:text-[#42b3c2]'
       }`}
     >
@@ -420,7 +421,8 @@ function TransactionRow({
     <button
       onClick={handleToggleCleared}
       title={txn.cleared ? 'Cleared — click to unclear' : 'Uncleared — click to clear'}
-      className="flex items-center justify-center flex-shrink-0"
+      aria-label={txn.cleared ? 'Mark as uncleared' : 'Mark as cleared'}
+      className="flex items-center justify-center flex-shrink-0 p-1"
     >
       <span
         className={`w-2.5 h-2.5 rounded-full border transition-colors ${
@@ -496,6 +498,7 @@ function TransactionRow({
                 onClick={onEdit}
                 className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1.5 py-1 rounded transition-colors"
                 title="Edit"
+                aria-label="Edit transaction"
               >
                 ✎
               </button>
@@ -535,6 +538,7 @@ function TransactionRow({
             onClick={onEdit}
             className="text-xs text-[#3a3b58] hover:text-[#b3a1e6] opacity-0 group-hover:opacity-100 transition-all px-1"
             title="Edit"
+            aria-label="Edit transaction"
           >
             ✎
           </button>

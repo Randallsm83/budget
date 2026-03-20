@@ -39,36 +39,45 @@ export default async function BudgetPage({ params }: Props) {
   const userId = session!.user.id
   const nextMonthStart = firstDayOfNextMonth(month)
 
-  // Backfill CC Payment categories for any existing CC accounts missing them
-  await ensureCCPaymentCategories()
-
   // -------------------------------------------------------------------------
-  // Determine on-budget account IDs + identify credit card accounts
+  // Round 1: fetch everything that doesn’t depend on other results in parallel
   // -------------------------------------------------------------------------
   const ON_BUDGET_TYPES = ['checking', 'savings', 'cash', 'credit_card']
 
-  const budgetAccts = await db
-    .select({ id: accounts.id, type: accounts.type, balance: accounts.balance })
-    .from(accounts)
-    .where(and(eq(accounts.userId, userId), inArray(accounts.type, ON_BUDGET_TYPES)))
+  const [, budgetAccts, groups, allBudgets] = await Promise.all([
+    ensureCCPaymentCategories(),
+    db.select({ id: accounts.id, type: accounts.type, balance: accounts.balance })
+      .from(accounts)
+      .where(and(eq(accounts.userId, userId), inArray(accounts.type, ON_BUDGET_TYPES))),
+    db.query.categoryGroups.findMany({
+      where: eq(categoryGroups.userId, userId),
+      with: { categories: { orderBy: [asc(categories.sortOrder)] } },
+      orderBy: [asc(categoryGroups.sortOrder)],
+    }),
+    db.select()
+      .from(monthBudgets)
+      .where(and(eq(monthBudgets.userId, userId), lte(monthBudgets.month, month))),
+  ])
 
   const budgetAccountIds = budgetAccts.map((a) => a.id)
   const ccAccountIds = new Set(budgetAccts.filter((a) => a.type === 'credit_card').map((a) => a.id))
-  // Actual card balance (stored as negative milliunits) → amount owed to issuer
   const ccActualBalance = new Map(budgetAccts.filter((a) => a.type === 'credit_card').map((a) => [a.id, -a.balance]))
 
   // -------------------------------------------------------------------------
-  // Fetch all groups + categories
+  // Round 2: transactions need budgetAccountIds from round 1
   // -------------------------------------------------------------------------
-  const groups = await db.query.categoryGroups.findMany({
-    where: eq(categoryGroups.userId, userId),
-    with: { categories: { orderBy: [asc(categories.sortOrder)] } },
-    orderBy: [asc(categoryGroups.sortOrder)],
-  })
+  const allTxns = budgetAccountIds.length === 0
+    ? []
+    : await db
+        .select()
+        .from(transactions)
+        .where(and(
+          eq(transactions.userId, userId),
+          lt(transactions.date, nextMonthStart),
+          inArray(transactions.accountId, budgetAccountIds),
+        ))
 
   // Build CC Payment category maps
-  // ccAccountToCatId: accountId → CC payment categoryId
-  // ccCatIds: set of all CC payment category IDs
   const ccAccountToCatId = new Map<string, string>()
   const ccCatIds = new Set<string>()
   for (const g of groups) {
@@ -82,38 +91,15 @@ export default async function BudgetPage({ params }: Props) {
     }
   }
 
-  // Legacy user-defined transfer categories (hidden from budget, excluded from math)
   const legacyTransferCatIds = new Set(
     groups.filter((g) => g.isTransfer && !g.isSystem).flatMap((g) => g.categories.map((c) => c.id))
   )
-
-  // Regular budget category IDs (excludes income, CC payment, and legacy transfer)
   const allCategoryIds = groups
     .filter((g) => !g.isTransfer && !g.isSystem)
     .flatMap((g) => g.categories.map((c) => c.id))
-
   const incomeCatIds = new Set(
     groups.filter((g) => g.isIncome).flatMap((g) => g.categories.map((c) => c.id))
   )
-
-  // -------------------------------------------------------------------------
-  // Fetch transactions + budgets
-  // -------------------------------------------------------------------------
-  const allTxns = budgetAccountIds.length === 0
-    ? []
-    : await db
-        .select()
-        .from(transactions)
-        .where(and(
-          eq(transactions.userId, userId),
-          lt(transactions.date, nextMonthStart),
-          inArray(transactions.accountId, budgetAccountIds),
-        ))
-
-  const allBudgets = await db
-    .select()
-    .from(monthBudgets)
-    .where(and(eq(monthBudgets.userId, userId), lte(monthBudgets.month, month)))
 
   // -------------------------------------------------------------------------
   // Build activity maps
