@@ -28,7 +28,7 @@ import {
   reorderGroups,
   reorderCategories,
 } from '@/lib/actions'
-import { formatMoney, parseMoney, getBankColor } from '@/lib/budget'
+import { formatMoney, parseMoney, getBankBrand } from '@/lib/budget'
 
 export interface CategoryRow {
   id: string
@@ -538,14 +538,14 @@ function AddGroupRow() {
 // Mini bank card SVG icon
 // ---------------------------------------------------------------------------
 function BankCard({ name }: { name: string }) {
-  const color = getBankColor(name)
+  const { color, abbrev } = getBankBrand(name)
   return (
-    <svg width="20" height="14" viewBox="0 0 20 14" fill="none" aria-hidden className="flex-shrink-0">
-      <rect x="0.5" y="0.5" width="19" height="13" rx="2" fill={color} fillOpacity="0.18" stroke={color} strokeOpacity="0.6" />
-      {/* magnetic stripe */}
-      <rect x="0" y="3" width="20" height="2.5" fill={color} fillOpacity="0.35" />
-      {/* chip */}
-      <rect x="3" y="7" width="4.5" height="3.5" rx="0.5" fill={color} fillOpacity="0.7" />
+    <svg width="24" height="16" viewBox="0 0 24 16" fill="none" aria-hidden className="flex-shrink-0">
+      <rect x="0.5" y="0.5" width="23" height="15" rx="2" fill={color} fillOpacity="0.15" stroke={color} strokeOpacity="0.7" />
+      {/* stripe */}
+      <rect x="0" y="3.5" width="24" height="2.5" fill={color} fillOpacity="0.4" />
+      {/* abbreviation */}
+      <text x="12" y="13" textAnchor="middle" fill={color} fontSize="5.5" fontWeight="700" fontFamily="monospace" opacity="0.9">{abbrev}</text>
     </svg>
   )
 }
@@ -673,7 +673,7 @@ export function BudgetTable({ month, groups }: { month: string; groups: GroupRow
         )}
         {expenseGroups.length > 0 && (
           <>
-            {incomeGroups.length > 0 && sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Budgeted', 'Activity', 'Balance'])}
+            {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Budgeted', 'Activity', 'Balance'])}
             {renderSection(expenseGroups)}
           </>
         )}

@@ -9,6 +9,7 @@ import {
   computeCategoryBalance,
   computeReadyToAssign,
   getBankColor,
+  getBankBrand,
 } from '../budget'
 
 describe('formatMoney', () => {
@@ -107,13 +108,19 @@ describe('computeCategoryBalance', () => {
   })
 })
 
+describe('getBankBrand', () => {
+  it('returns Chase blue + CH abbrev', () => expect(getBankBrand('Chase Sapphire')).toEqual({ color: '#1164B4', abbrev: 'CH' }))
+  it('returns Amex gold + AX abbrev', () => expect(getBankBrand('Amex Platinum')).toEqual({ color: '#B8860B', abbrev: 'AX' }))
+  it('returns Citi red + CI abbrev', () => expect(getBankBrand('Citi Double Cash')).toEqual({ color: '#C41E3A', abbrev: 'CI' }))
+  it('returns Capital One red + C1 abbrev', () => expect(getBankBrand('Capital One Quicksilver')).toEqual({ color: '#C42A17', abbrev: 'C1' }))
+  it('returns default for unknown bank', () => expect(getBankBrand('My Random Card')).toEqual({ color: '#42b3c2', abbrev: '??' }))
+  it('is case-insensitive', () => expect(getBankBrand('chase freedom').abbrev).toBe('CH'))
+})
+
 describe('getBankColor', () => {
   it('matches Chase', () => expect(getBankColor('Chase Sapphire')).toBe('#1164B4'))
-  it('matches Citi', () => expect(getBankColor('Citi Double Cash')).toBe('#004A97'))
-  it('matches Capital One', () => expect(getBankColor('Capital One Quicksilver')).toBe('#C42A17'))
   it('matches Wells Fargo', () => expect(getBankColor('Wells Fargo Visa')).toBe('#D71E28'))
   it('returns default for unknown bank', () => expect(getBankColor('My Random Card')).toBe('#42b3c2'))
-  it('is case-insensitive', () => expect(getBankColor('chase freedom')).toBe('#1164B4'))
 })
 
 describe('computeReadyToAssign', () => {
