@@ -8,6 +8,7 @@ import {
   formatMonthDisplay,
   computeCategoryBalance,
   computeReadyToAssign,
+  getBankColor,
 } from '../budget'
 
 describe('formatMoney', () => {
@@ -104,6 +105,15 @@ describe('computeCategoryBalance', () => {
       activity: -20000,
     }).balance).toBe(-20000)
   })
+})
+
+describe('getBankColor', () => {
+  it('matches Chase', () => expect(getBankColor('Chase Sapphire')).toBe('#1164B4'))
+  it('matches Citi', () => expect(getBankColor('Citi Double Cash')).toBe('#004A97'))
+  it('matches Capital One', () => expect(getBankColor('Capital One Quicksilver')).toBe('#C42A17'))
+  it('matches Wells Fargo', () => expect(getBankColor('Wells Fargo Visa')).toBe('#D71E28'))
+  it('returns default for unknown bank', () => expect(getBankColor('My Random Card')).toBe('#42b3c2'))
+  it('is case-insensitive', () => expect(getBankColor('chase freedom')).toBe('#1164B4'))
 })
 
 describe('computeReadyToAssign', () => {

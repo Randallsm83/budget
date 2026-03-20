@@ -102,6 +102,35 @@ export function formatMonthDisplay(month: string): string {
   })
 }
 
+// ---------------------------------------------------------------------------
+// Bank brand colors
+// ---------------------------------------------------------------------------
+
+const BANK_COLORS: [RegExp, string][] = [
+  [/chase/i,                          '#1164B4'], // Chase blue
+  [/amex|american\s?express/i,        '#016FD0'], // Amex blue
+  [/citi(bank)?/i,                    '#004A97'], // Citi blue
+  [/wells\s?fargo/i,                  '#D71E28'], // Wells Fargo red
+  [/bank\s?of\s?america|bofa/i,       '#E31837'], // BofA red
+  [/capital\s?one/i,                  '#C42A17'], // Capital One red
+  [/discover/i,                       '#F76107'], // Discover orange
+  [/us\s?bank/i,                      '#0069AA'], // US Bank blue
+  [/barclays/i,                       '#00AEEF'], // Barclays cyan
+  [/synchrony/i,                      '#5B2D86'], // Synchrony purple
+  [/ally/i,                           '#7A2487'], // Ally purple
+  [/navy\s?fed|nfcu/i,                '#002868'], // Navy Federal navy
+  [/pnc/i,                            '#F58025'], // PNC orange
+  [/td\s?bank|toronto-dominion/i,     '#34B233'], // TD green
+]
+
+/** Return a hex brand color for a card name, or a default teal. */
+export function getBankColor(name: string): string {
+  for (const [pattern, color] of BANK_COLORS) {
+    if (pattern.test(name)) return color
+  }
+  return '#42b3c2' // default
+}
+
 /** Return the current month as 'YYYY-MM'. */
 export function currentMonth(): string {
   const now = new Date()
