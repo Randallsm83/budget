@@ -35,6 +35,19 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const relinkAccounts = [...relinkAccountMap.values()]
   const relinkAccountIds = new Set(relinkAccounts.map((r) => r.id))
 
+  // New accounts available — one representative account per Plaid Item
+  const newAccountsRows = await db
+    .select({ id: accounts.id, name: accounts.name, plaidItemId: importConnections.plaidItemId })
+    .from(importConnections)
+    .innerJoin(accounts, eq(importConnections.accountId, accounts.id))
+    .where(and(eq(importConnections.userId, session.user.id), eq(importConnections.newAccountsAvailable, true)))
+  const seenItems = new Set<string>()
+  const newAccountsItems = newAccountsRows.filter((r) => {
+    if (!r.plaidItemId || seenItems.has(r.plaidItemId)) return false
+    seenItems.add(r.plaidItemId)
+    return true
+  })
+
   const cashAccounts = userAccounts.filter((a) => !LIABILITY_TYPES.has(a.type) && !INVESTMENT_TYPES.has(a.type) && !PROPERTY_TYPES.has(a.type))
   const investmentAccounts = userAccounts.filter((a) => INVESTMENT_TYPES.has(a.type))
   const propertyAccounts = userAccounts.filter((a) => PROPERTY_TYPES.has(a.type))
@@ -109,7 +122,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   )
 
   return (
-    <AppShell sidebarContent={sidebarContent} relinkAccounts={relinkAccounts}>
+    <AppShell sidebarContent={sidebarContent} relinkAccounts={relinkAccounts} newAccountsItems={newAccountsItems}>
       {children}
     </AppShell>
   )

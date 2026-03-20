@@ -10,12 +10,44 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { public_token, accountId } = await req.json()
+  const { public_token, accountId, institutionId } =
+    (await req.json()) as { public_token: string; accountId: string; institutionId?: string }
 
   const response = await plaidClient.itemPublicTokenExchange({ public_token })
   const accessToken = response.data.access_token
   const plaidItemId = response.data.item_id
   const accessTokenEncrypted = encrypt(accessToken)
+
+  // ---------------------------------------------------------------------------
+  // Duplicate Item detection
+  // Per Plaid docs: check whether this user already has an Item from the same
+  // institution before storing the new access token.
+  //
+  // Case 1 — same item_id: the user re-linked the same Plaid Item (e.g., to add
+  //   another account from the same bank). This is intentional; fall through to
+  //   the upsert below.
+  //
+  // Case 2 — different item_id, same institution_id: a second, separate Plaid
+  //   Item was created for the same institution. This is a duplicate. Remove the
+  //   newly created token immediately and return a 409 so the client can inform
+  //   the user that this bank is already connected.
+  // ---------------------------------------------------------------------------
+  if (institutionId) {
+    const existingInstitutionConn = await db.query.importConnections.findFirst({
+      where: and(
+        eq(importConnections.userId, session.user.id),
+        eq(importConnections.plaidInstitutionId, institutionId),
+      ),
+    })
+    if (existingInstitutionConn && existingInstitutionConn.plaidItemId !== plaidItemId) {
+      // Duplicate: remove the newly exchanged token so we are not billed twice
+      try { await plaidClient.itemRemove({ access_token: accessToken }) } catch { /* ignore */ }
+      return NextResponse.json(
+        { duplicate: true, message: 'This bank is already connected to one of your accounts.' },
+        { status: 409 },
+      )
+    }
+  }
 
   // Upsert: update existing connection or create new one
   const existing = await db.query.importConnections.findFirst({
@@ -28,13 +60,14 @@ export async function POST(req: NextRequest) {
   if (existing) {
     await db
       .update(importConnections)
-      .set({ plaidItemId, accessTokenEncrypted, cursor: null, lastSyncedAt: null })
+      .set({ plaidItemId, plaidInstitutionId: institutionId ?? null, accessTokenEncrypted, cursor: null, lastSyncedAt: null })
       .where(eq(importConnections.id, existing.id))
   } else {
     await db.insert(importConnections).values({
       userId: session.user.id,
       accountId,
       plaidItemId,
+      plaidInstitutionId: institutionId ?? null,
       accessTokenEncrypted,
     })
   }

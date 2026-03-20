@@ -4,8 +4,9 @@ import { revalidatePath } from 'next/cache'
 import { and, asc, eq, inArray, isNull, isNotNull, max, count, sql } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { accounts, categories, categoryGroups, monthBudgets, transactions, payeeRules } from '@/db/schema'
+import { accounts, categories, categoryGroups, importConnections, investmentHoldings, liabilityDetails, monthBudgets, transactions, payeeRules, users } from '@/db/schema'
 import { normalizePayee } from '@/lib/payee'
+import { removeItem } from '@/lib/plaid-item'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -30,6 +31,59 @@ async function requireUser(): Promise<string> {
   const session = await auth()
   if (!session?.user?.id) throw new Error('Not authenticated')
   return session.user.id
+}
+
+// ---------------------------------------------------------------------------
+// Plaid
+// ---------------------------------------------------------------------------
+
+/**
+ * Clears the requiresRelink flag for all connections sharing the same Plaid Item
+ * as the given account. Called immediately when update mode completes so the
+ * re-link prompts are dismissed even if the subsequent sync fails.
+ */
+export async function clearRelinkRequired(accountId: string) {
+  const userId = await requireUser()
+  const conn = await db.query.importConnections.findFirst({
+    where: and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)),
+  })
+  if (!conn) return
+  if (conn.plaidItemId) {
+    // Clear all connections for this Item — update mode repairs the whole Item
+    await db
+      .update(importConnections)
+      .set({ requiresRelink: false })
+      .where(eq(importConnections.plaidItemId, conn.plaidItemId))
+  } else {
+    await db
+      .update(importConnections)
+      .set({ requiresRelink: false })
+      .where(and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)))
+  }
+}
+
+/**
+ * Clears the newAccountsAvailable flag for all connections sharing the same
+ * Plaid Item as the given account. Called when the user completes or dismisses
+ * the add-new-accounts update mode flow.
+ */
+export async function clearNewAccountsAvailable(accountId: string) {
+  const userId = await requireUser()
+  const conn = await db.query.importConnections.findFirst({
+    where: and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)),
+  })
+  if (!conn) return
+  if (conn.plaidItemId) {
+    await db
+      .update(importConnections)
+      .set({ newAccountsAvailable: false })
+      .where(eq(importConnections.plaidItemId, conn.plaidItemId))
+  } else {
+    await db
+      .update(importConnections)
+      .set({ newAccountsAvailable: false })
+      .where(and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)))
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -423,6 +477,32 @@ export async function deleteAccount(id: string) {
   })
   if (!account) throw new Error('Account not found')
 
+  // --- Plaid cleanup: call /item/remove before the connection row is orphaned ---
+  // importConnections.accountId uses onDelete:set null, so the row would linger
+  // with the encrypted access token after the account is deleted. Explicitly
+  // remove the Item and delete the row now.
+  const conns = await db.query.importConnections.findMany({
+    where: and(eq(importConnections.accountId, id), eq(importConnections.userId, userId)),
+  })
+  for (const conn of conns) {
+    if (conn.plaidItemId) {
+      // Only call itemRemove if no other accounts share this Item
+      const sibling = await db.query.importConnections.findFirst({
+        where: and(
+          eq(importConnections.plaidItemId, conn.plaidItemId),
+          eq(importConnections.userId, userId),
+        ),
+      })
+      const onlyThisAccount = !sibling || sibling.accountId === id
+      if (onlyThisAccount && conn.accessTokenEncrypted) {
+        await removeItem(conn.accessTokenEncrypted)
+      }
+    } else if (conn.accessTokenEncrypted) {
+      await removeItem(conn.accessTokenEncrypted)
+    }
+    await db.delete(importConnections).where(eq(importConnections.id, conn.id))
+  }
+
   // Delete linked CC Payment category before deleting the account
   // (ccAccountId will become null via onDelete:set null, so we delete it explicitly first)
   if (account.type === 'credit_card') {
@@ -443,13 +523,64 @@ export async function deleteAccount(id: string) {
     }
   }
 
-  // Transactions are cascade-deleted by the DB (onDelete: 'cascade').
+  // Transactions, holdings, and liability details are cascade-deleted by the DB.
   await db
     .delete(accounts)
     .where(and(eq(accounts.id, id), eq(accounts.userId, userId)))
 
   revalidatePath('/accounts')
   revalidatePath('/')
+}
+
+/**
+ * Disconnects the Plaid bank connection for an account without deleting the
+ * account or its transactions. Calls /item/remove on the whole Item (all
+ * accounts at the same institution share one Item), deletes Plaid-fetched data
+ * (holdings, liability details), and removes the importConnections rows so no
+ * access tokens remain in the database.
+ */
+export async function disconnectPlaidConnection(accountId: string): Promise<void> {
+  const userId = await requireUser()
+
+  const conn = await db.query.importConnections.findFirst({
+    where: and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)),
+  })
+  if (!conn) return
+
+  // Find all connections sharing the same Plaid Item (same bank)
+  const itemConns = conn.plaidItemId
+    ? await db.query.importConnections.findMany({
+        where: and(
+          eq(importConnections.plaidItemId, conn.plaidItemId),
+          eq(importConnections.userId, userId),
+        ),
+      })
+    : [conn]
+
+  // Call /item/remove — deactivates the Item for all accounts at this institution
+  if (conn.accessTokenEncrypted) {
+    await removeItem(conn.accessTokenEncrypted)
+  }
+
+  // Delete Plaid-sourced data for all affected accounts (data retention: no
+  // business need to keep API-fetched market/liability data without the connection)
+  const affectedIds = itemConns.map((c) => c.accountId).filter((aid): aid is string => aid !== null)
+  if (affectedIds.length > 0) {
+    await db.delete(investmentHoldings).where(inArray(investmentHoldings.accountId, affectedIds))
+    await db.delete(liabilityDetails).where(inArray(liabilityDetails.accountId, affectedIds))
+  }
+
+  // Delete all connection rows for this Item — removes access tokens from DB
+  if (conn.plaidItemId) {
+    await db
+      .delete(importConnections)
+      .where(and(eq(importConnections.plaidItemId, conn.plaidItemId), eq(importConnections.userId, userId)))
+  } else {
+    await db.delete(importConnections).where(eq(importConnections.id, conn.id))
+  }
+
+  revalidatePath('/accounts')
+  revalidatePath(`/accounts/${accountId}`)
 }
 
 // ---------------------------------------------------------------------------

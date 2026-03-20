@@ -6,7 +6,8 @@ import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
 import { PlaidRelink } from './PlaidRelink'
-import { applyPayeeRules, deleteTransaction, recategorizePayee, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { PlaidNewAccounts } from './PlaidNewAccounts'
+import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
 
@@ -58,7 +59,7 @@ interface Props {
   transactions: Transaction[]
   allAccounts: { id: string; name: string }[]
   allCategories: { id: string; name: string; groupName: string; isIncome: boolean; isCCPayment: boolean }[]
-  connection: { id: string; lastSyncedAt: string | null; requiresRelink: boolean } | null
+  connection: { id: string; lastSyncedAt: string | null; requiresRelink: boolean; newAccountsAvailable: boolean } | null
   holdings?: InvestmentHolding[]
   liabilityDetails?: LiabilityDetail | null
 }
@@ -583,6 +584,8 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [applyingRules, setApplyingRules] = useState(false)
   const [enriching, setEnriching] = useState(false)
   const [relinkRequired, setRelinkRequired] = useState(connection?.requiresRelink ?? false)
+  const [newAccountsAvailable, setNewAccountsAvailable] = useState(connection?.newAccountsAvailable ?? false)
+  const [disconnecting, setDisconnecting] = useState(false)
   const [pendingRecat, setPendingRecat] = useState<{ payee: string; catId: string | null; catName: string | null } | null>(null)
   const [recatPending, setRecatPending] = useState(false)
   const [, startTransition] = useTransition()
@@ -808,11 +811,24 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 <span className="hidden sm:inline">{loadingHistory ? 'Loading…' : 'Load History'}</span>
               </button>
             )}
+            {!isTracking && connection && newAccountsAvailable && !relinkRequired && (
+              <PlaidNewAccounts
+                accountId={account.id}
+                onComplete={() => { setNewAccountsAvailable(false); router.refresh() }}
+              />
+            )}
             {!isTracking && (
               relinkRequired ? (
                 <PlaidRelink
                   accountId={account.id}
-                  onRelinkComplete={() => { setRelinkRequired(false); handleSync() }}
+                  onRelinkComplete={async () => {
+                    // Clear the DB flag immediately so all prompts dismiss even
+                    // if the subsequent sync fails (Item is repaired at this point).
+                    setRelinkRequired(false)
+                    try { await clearRelinkRequired(account.id) } catch { /* non-critical */ }
+                    router.refresh()
+                    handleSync()
+                  }}
                 />
               ) : connection ? (
                 <button
@@ -857,6 +873,27 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           </div>
           {syncResult && (
             <span className="text-[10px] text-[#8a8fad] text-right block max-w-[16rem] sm:max-w-xs break-words">{syncResult}</span>
+          )}
+          {connection && (
+            <button
+              onClick={async () => {
+                if (!confirm('Disconnect this bank? Transactions are kept, but syncing will stop and your access token will be removed from Coffer.'))
+                  return
+                setDisconnecting(true)
+                try {
+                  await disconnectPlaidConnection(account.id)
+                  router.refresh()
+                } catch {
+                  setSyncResult('Disconnect failed — try again')
+                } finally {
+                  setDisconnecting(false)
+                }
+              }}
+              disabled={disconnecting}
+              className="text-[10px] text-[#5a5b78] hover:text-[#ce6f8f] transition-colors disabled:opacity-50"
+            >
+              {disconnecting ? 'Disconnecting…' : 'Disconnect bank'}
+            </button>
           )}
         </div>
       </div>

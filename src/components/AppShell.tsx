@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { usePathname } from 'next/navigation'
 import { RelinkBanner } from './RelinkBanner'
+import { NewAccountsBanner } from './NewAccountsBanner'
 
 export function AppShell({
   sidebarContent,
@@ -11,6 +12,7 @@ export function AppShell({
 }: {
   sidebarContent: React.ReactNode
   relinkAccounts?: { id: string; name: string }[]
+  newAccountsItems?: { id: string; name: string }[]
   children: React.ReactNode
 }) {
   const [mobileOpen, setMobileOpen] = useState(false)
@@ -101,6 +103,7 @@ export function AppShell({
         </div>
 
         <RelinkBanner accounts={relinkAccounts ?? []} />
+        <NewAccountsBanner items={newAccountsItems ?? []} />
         <main className="flex-1 overflow-hidden flex flex-col">{children}</main>
       </div>
     </div>

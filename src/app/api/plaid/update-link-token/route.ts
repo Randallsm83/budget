@@ -11,7 +11,7 @@ export async function POST(req: NextRequest) {
   const session = await auth()
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
 
-  const { accountId } = await req.json()
+  const { accountId, accountSelectionEnabled } = await req.json() as { accountId: string; accountSelectionEnabled?: boolean }
 
   const connection = await db.query.importConnections.findFirst({
     where: and(
@@ -28,12 +28,14 @@ export async function POST(req: NextRequest) {
   try {
     // Update mode: pass access_token instead of products — Plaid re-authenticates
     // the existing Item without creating a new one. No token exchange needed on success.
+    // account_selection_enabled=true opens the account picker so users can share new accounts.
     const res = await plaidClient.linkTokenCreate({
       user: { client_user_id: session.user.id },
       client_name: 'Coffer',
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',
+      ...(accountSelectionEnabled ? { update: { account_selection_enabled: true } } : {}),
       ...(process.env.PLAID_REDIRECT_URI
         ? { redirect_uri: process.env.PLAID_REDIRECT_URI }
         : {}),

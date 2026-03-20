@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react'
 import { usePlaidLink } from 'react-plaid-link'
+import { PlaidConsentModal } from './PlaidConsentModal'
 
 interface Props {
   accountId: string
@@ -12,6 +13,7 @@ export function PlaidLink({ accountId, onConnected }: Props) {
   const [linkToken, setLinkToken] = useState<string | null>(null)
   const [exchanging, setExchanging] = useState(false)
   const [error, setError] = useState('')
+  const [showConsent, setShowConsent] = useState(false)
 
   useEffect(() => {
     fetch('/api/plaid/link-token', { method: 'POST' })
@@ -54,14 +56,22 @@ export function PlaidLink({ accountId, onConnected }: Props) {
   }
 
   return (
-    <button
-      onClick={handleOpen}
-      disabled={!ready || exchanging}
-      title={error || undefined}
-      className="border border-[#b3a1e6] text-[#b3a1e6] hover:bg-[#b3a1e6]/10 font-medium px-3 py-1.5
-                 rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-    >
-      {exchanging ? 'Connecting…' : error ? '⚠️ Connect Bank' : '🏦 Connect Bank'}
-    </button>
+    <>
+      {showConsent && (
+        <PlaidConsentModal
+          onConfirm={() => { setShowConsent(false); handleOpen() }}
+          onCancel={() => setShowConsent(false)}
+        />
+      )}
+      <button
+        onClick={() => setShowConsent(true)}
+        disabled={!ready || exchanging}
+        title={error || undefined}
+        className="border border-[#b3a1e6] text-[#b3a1e6] hover:bg-[#b3a1e6]/10 font-medium px-3 py-1.5
+                   rounded-lg text-sm transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+      >
+        {exchanging ? 'Connecting…' : error ? '⚠️ Connect Bank' : '🏦 Connect Bank'}
+      </button>
+    </>
   )
 }

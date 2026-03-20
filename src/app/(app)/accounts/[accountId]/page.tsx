@@ -86,7 +86,7 @@ export default async function AccountRegisterPage({ params }: Props) {
   return (
     <AccountRegister
       account={{ id: account.id, name: account.name, type: account.type, balance: account.balance, clearedBalance: account.clearedBalance }}
-      connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null, requiresRelink: connection.requiresRelink } : null}
+      connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null, requiresRelink: connection.requiresRelink, newAccountsAvailable: connection.newAccountsAvailable } : null}
       transactions={txns.map((t) => ({
         id: t.id,
         accountId: account.id,

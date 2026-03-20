@@ -5,6 +5,12 @@ import bcrypt from 'bcryptjs'
 import * as OTPAuth from 'otpauth'
 import { db } from '@/db'
 import { users } from '@/db/schema'
+import { decrypt } from '@/lib/crypto'
+
+// Handles both encrypted (ivHex:tagHex:ciphertextHex) and legacy plaintext base32 secrets.
+function resolveMfaSecret(stored: string): string {
+  return stored.includes(':') ? decrypt(stored) : stored
+}
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -32,7 +38,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         if (user.mfaEnabled && user.mfaSecret) {
           const code = (credentials.totpCode as string | undefined)?.trim()
           if (!code) return null
-          const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(user.mfaSecret) })
+          const totp = new OTPAuth.TOTP({ secret: OTPAuth.Secret.fromBase32(resolveMfaSecret(user.mfaSecret)) })
           const delta = totp.validate({ token: code, window: 1 })
           if (delta === null) return null
         }
