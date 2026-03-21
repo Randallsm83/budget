@@ -232,7 +232,7 @@ export default function SecuritySettingsPage() {
       <div className="mt-8 bg-[#1f2039] border border-[#ce6f8f]/30 rounded-xl p-5">
         <p className="text-sm font-medium text-[#ecf0f1] mb-1">Delete Account</p>
         <p className="text-xs text-[#8a8fad] mb-4">
-          Permanently deletes your Coffer account, all budgets, transactions, and bank connections.
+          Permanently deletes your account, all budgets, transactions, and bank connections.
           This also calls Plaid’s /item/remove for every linked institution. This cannot be undone.
         </p>
 

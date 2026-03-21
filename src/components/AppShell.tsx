@@ -68,7 +68,7 @@ export function AppShell({
         aria-label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'}
         className="
           hidden lg:flex items-center justify-center flex-shrink-0
-          w-[14px] bg-[#1f2039] border-r border-[#3a3b58]
+          w-5 bg-[#1f2039] border-r border-[#3a3b58]
           text-[#3a3b58] hover:text-[#b3a1e6] hover:bg-[#252640]
           transition-colors group
         "
@@ -77,7 +77,7 @@ export function AppShell({
         <svg
           width="6" height="10" viewBox="0 0 6 10" fill="none"
           stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"
-          className="opacity-0 group-hover:opacity-100 transition-opacity"
+          className="opacity-30 group-hover:opacity-100 transition-opacity"
         >
           {collapsed
             ? <polyline points="1,1 5,5 1,9" />

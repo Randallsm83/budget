@@ -5,11 +5,14 @@ import { useRouter } from 'next/navigation'
 import { usePlaidLink } from 'react-plaid-link'
 import { addAccount } from '@/lib/actions'
 
-const ACCOUNT_TYPES = [
+const BUDGET_ACCOUNT_TYPES = [
   { value: 'checking', label: 'Checking' },
   { value: 'savings', label: 'Savings' },
   { value: 'cash', label: 'Cash' },
   { value: 'credit_card', label: 'Credit Card' },
+]
+
+const TRACKING_ACCOUNT_TYPES = [
   { value: 'loan', label: 'Loan / Mortgage' },
   { value: 'real_estate', label: 'Real Estate' },
   { value: 'vehicle', label: 'Vehicle' },
@@ -53,7 +56,7 @@ function PlaidConnectSection({ onDone, onError }: { onDone: () => void; onError:
   return (
     <div className="py-4 flex flex-col items-center gap-3">
       <p className="text-sm text-[#8a8fad] text-center">
-        Connect your bank and Coffer will automatically import your accounts and balances.
+        Connect your bank and Budget will automatically import your accounts and balances.
       </p>
       <button
         onClick={() => open()}
@@ -176,11 +179,16 @@ export function AddAccountModal({ onClose }: { onClose: () => void }) {
               className="w-full bg-[#2a2b45] border border-[#3a3b58] text-[#ecf0f1] rounded-lg px-3 py-2 text-sm
                          focus:outline-none focus:border-[#b3a1e6] focus:ring-1 focus:ring-[#b3a1e6] transition-colors"
             >
-              {ACCOUNT_TYPES.map((t) => (
-                <option key={t.value} value={t.value}>
-                  {t.label}
-                </option>
-              ))}
+              <optgroup label="Budget Accounts">
+                {BUDGET_ACCOUNT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </optgroup>
+              <optgroup label="Tracking Accounts (net worth only)">
+                {TRACKING_ACCOUNT_TYPES.map((t) => (
+                  <option key={t.value} value={t.value}>{t.label}</option>
+                ))}
+              </optgroup>
             </select>
           </div>
 

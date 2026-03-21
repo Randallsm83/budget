@@ -300,6 +300,15 @@ const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'loan', 
 
 const TRANSFER_PAYEE_RE = /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i
 
+/** Display-only title-casing for ALL-CAPS bank payee strings. Stored value is unchanged. */
+function displayPayee(payee: string): string {
+  if (!payee) return payee
+  if (payee === payee.toUpperCase() && /[A-Z]/.test(payee)) {
+    return payee.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
+  }
+  return payee
+}
+
 function TransactionRow({
   txn,
   allCategories,
@@ -470,7 +479,7 @@ function TransactionRow({
           {/* Row 1: payee + amount */}
           <div className="flex items-start justify-between gap-2">
             <div className="min-w-0">
-              <p className="text-sm text-[#ecf0f1] truncate">{txn.payee || '—'}</p>
+          <p className="text-sm text-[#ecf0f1] truncate">{displayPayee(txn.payee) || '—'}</p>
               {txn.memo && <p className="text-xs text-[#8a8fad] truncate">{txn.memo}</p>}
             </div>
             <span className={`text-sm tabular-nums font-medium flex-shrink-0 ${
@@ -517,7 +526,7 @@ function TransactionRow({
         {clearedDot}
         <span className="text-xs text-[#8a8fad] tabular-nums">{txn.date}</span>
         <div className="min-w-0">
-          <p className="text-sm text-[#ecf0f1] truncate">{txn.payee || '—'}</p>
+          <p className="text-sm text-[#ecf0f1] truncate">{displayPayee(txn.payee) || '—'}</p>
           {txn.memo && <p className="text-xs text-[#8a8fad] truncate">{txn.memo}</p>}
         </div>
         {!isTracking && (
@@ -532,11 +541,11 @@ function TransactionRow({
         </span>
         <div className="flex justify-end items-center gap-1">
           {!isTracking && (
-            <span className="opacity-0 group-hover:opacity-100 transition-all">{transferToggle}</span>
+            <span className="opacity-30 group-hover:opacity-100 transition-all">{transferToggle}</span>
           )}
           <button
             onClick={onEdit}
-            className="text-xs text-[#3a3b58] hover:text-[#b3a1e6] opacity-0 group-hover:opacity-100 transition-all px-1"
+            className="text-xs text-[#3a3b58] hover:text-[#b3a1e6] opacity-30 group-hover:opacity-100 transition-all px-1"
             title="Edit"
             aria-label="Edit transaction"
           >
@@ -560,7 +569,7 @@ function TransactionRow({
           ) : (
             <button
               onClick={() => setConfirming(true)}
-              className="text-xs text-[#3a3b58] hover:text-[#ce6f8f] opacity-0 group-hover:opacity-100 transition-all"
+              className="text-xs text-[#3a3b58] hover:text-[#ce6f8f] opacity-30 group-hover:opacity-100 transition-all"
               title="Delete"
             >
               ✕
@@ -590,6 +599,11 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [relinkRequired, setRelinkRequired] = useState(connection?.requiresRelink ?? false)
   const [newAccountsAvailable, setNewAccountsAvailable] = useState(connection?.newAccountsAvailable ?? false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [showSecondary, setShowSecondary] = useState(false)
+
+  const uncategorizedCount = isTracking ? 0 : txns.filter(
+    (t) => !t.categoryId && !t.isTransfer && t.amount < 0
+  ).length
   const [pendingRecat, setPendingRecat] = useState<{ payee: string; catId: string | null; catName: string | null } | null>(null)
   const [recatPending, setRecatPending] = useState(false)
   const [, startTransition] = useTransition()
@@ -768,24 +782,35 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
         </div>
         <div className="flex flex-col items-end gap-1 min-w-0 flex-shrink-0">
           <div className="flex items-center gap-1.5 sm:gap-2 flex-wrap justify-end">
+            {/* Mobile overflow toggle */}
             {!isTracking && (
               <button
-                onClick={handleEnrich}
-                disabled={enriching}
-                title="Clean up merchant names and auto-categorize using Plaid Enrich"
-                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
-                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+                onClick={() => setShowSecondary((p) => !p)}
+                title="More actions"
+                className="sm:hidden border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 py-1.5 rounded-lg text-sm transition-colors"
               >
-                {enriching ? 'Enriching…' : '✨ Enrich'}
+                {showSecondary ? '×' : '⋯'}
               </button>
             )}
             {!isTracking && (
               <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
+                onClick={handleEnrich}
+                disabled={enriching}
+                title="Clean up merchant names and auto-categorize using Plaid Enrich"
+              >
+                {enriching ? 'Cleaning up…' : '✨ Clean up'}
+              </button>
+            )}
+            {!isTracking && (
+              <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
                 onClick={handleApplyRules}
                 disabled={applyingRules}
                 title="Re-categorize uncategorized transactions using saved payee rules"
-                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
-                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
               >
                 {applyingRules ? 'Applying…' : '★ Rules'}
               </button>
@@ -795,11 +820,11 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 onClick={handleLoadHistory}
                 disabled={loadingHistory || syncing}
                 title="Request up to 24 months of transaction history from Plaid. Transactions sync automatically via webhook — no need to click Sync."
-                className="border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
-                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
               >
                 <span className="sm:hidden">{loadingHistory ? '⏳' : '📜'}</span>
-                <span className="hidden sm:inline">{loadingHistory ? 'Requesting…' : 'Full History'}</span>
+                <span className="hidden sm:inline">{loadingHistory ? 'Loading…' : 'Load History'}</span>
               </button>
             )}
             {!isTracking && connection && newAccountsAvailable && !relinkRequired && (
@@ -868,7 +893,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           {connection && (
             <button
               onClick={async () => {
-                if (!confirm('Disconnect this bank? Transactions are kept, but syncing will stop and your access token will be removed from Coffer.'))
+if (!confirm('Disconnect this bank? Transactions are kept, but syncing will stop and your access token will be removed from Budget.'))
                   return
                 setDisconnecting(true)
                 try {
@@ -888,6 +913,13 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
           )}
         </div>
       </div>
+
+      {/* Uncategorized transactions nudge */}
+      {uncategorizedCount > 0 && (
+        <div className="flex-shrink-0 bg-[#e39400]/10 border-b border-[#e39400]/30 px-4 sm:px-6 py-2 text-xs text-[#e39400]">
+          <strong>{uncategorizedCount}</strong> uncategorized transaction{uncategorizedCount !== 1 ? 's' : ''} — click any category label to assign
+        </div>
+      )}
 
       {/* Holdings panel — investment accounts */}
       {account.type === 'investment' && (
