@@ -95,6 +95,36 @@ If you want to use bank sync, the following must be completed before going to pr
 - Optionally set `NEXT_PUBLIC_PRIVACY_URL` to show a privacy policy link in the pre-Link consent modal
 - Run `npm run test:offboarding` (requires `PLAID_SANDBOX_SECRET`) to verify `/item/remove` works end-to-end before launch
 
+## Account management
+
+**Resetting a forgotten password**
+
+There is no self-service password reset UI — this is an invite-only app. To reset a password manually:
+
+```bash
+# Option 1: re-seed (overwrites the existing user record)
+npm run db:seed
+
+# Option 2: update directly via Drizzle Studio
+npm run db:studio
+# → open the `users` table, find the row, update `password` to a new bcrypt hash
+```
+
+To generate a bcrypt hash outside the app:
+
+```bash
+node -e "const b = require('bcryptjs'); b.hash('newpassword', 12).then(console.log)"
+```
+
+**Disabling MFA**
+
+If a user is locked out of their TOTP authenticator app, clear the MFA secret directly:
+
+```bash
+npm run db:studio
+# → open the `users` table, set `mfa_secret` to NULL and `mfa_enabled` to false
+```
+
 ## Database commands
 
 ```bash
