@@ -108,14 +108,10 @@ export default async function AppLayout({ children }: { children: React.ReactNod
 
         {/* Sign out */}
         <div className="p-2 border-t border-[#3a3b58]">
-          <div className="px-2 pb-1">
-            <a
-              href="/settings/security"
-              className="text-[10px] text-[#5a5b78] hover:text-[#8a8fad] transition-colors"
-            >
-              Security settings
-            </a>
-          </div>
+          <NavLink href="/settings/security">
+            <span>⚙️</span>
+            Settings
+          </NavLink>
           <SignOutButton />
         </div>
     </>

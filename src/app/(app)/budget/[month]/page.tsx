@@ -5,13 +5,14 @@ import { accounts, transactions, monthBudgets, categoryGroups, categories } from
 import { asc, and, eq, inArray, lt, lte } from 'drizzle-orm'
 import Link from 'next/link'
 import { BudgetTable, type GroupRow } from '@/components/BudgetTable'
+import { RtaDisplay, type CoverItem } from '@/components/RtaDisplay'
+import { EmptyBudgetState } from '@/components/EmptyBudgetState'
 import { ensureCCPaymentCategories } from '@/lib/actions'
 import {
   firstDayOfNextMonth,
   prevMonth,
   nextMonth,
   formatMonthDisplay,
-  formatMoney,
 } from '@/lib/budget'
 
 interface Props {
@@ -20,7 +21,7 @@ interface Props {
 
 // Validate 'YYYY-MM' format
 function isValidMonth(m: string) {
-  return /^\d{4}-\d{2}$/.test(m)
+  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m)
 }
 
 export default async function BudgetPage({ params }: Props) {
@@ -165,7 +166,7 @@ export default async function BudgetPage({ params }: Props) {
   const sortedMonths = [...allMonths].filter((m) => m <= month).sort()
 
   const balanceMap: Record<string, number> = {}
-  let rta = 0
+  let runningRta = 0
 
   for (const m of sortedMonths) {
     const mActivity = activityMap[m] ?? {}
@@ -189,7 +190,7 @@ export default async function BudgetPage({ params }: Props) {
       balanceMap[ccPayCatId] = (balanceMap[ccPayCatId] ?? 0) + autoFund + paymentActivity
     }
 
-    rta += (inflowMap[m] ?? 0) + (incomeMap[m] ?? 0) - totalExpenseBudgeted
+    runningRta += (inflowMap[m] ?? 0) + (incomeMap[m] ?? 0) - totalExpenseBudgeted
   }
 
   // -------------------------------------------------------------------------
@@ -230,6 +231,28 @@ export default async function BudgetPage({ params }: Props) {
         totalBalance: cats.reduce((s, c) => s + c.balance, 0),
       }
     })
+  // Final RTA is derived from current on-budget liquid cash minus currently available
+  // expense balances. This keeps RTA aligned with what users see in the table.
+  const liquidCash = budgetAccts
+    .filter((a) => a.type === 'checking' || a.type === 'savings' || a.type === 'cash')
+    .reduce((s, a) => s + a.balance, 0)
+  const assignedExpenseTotal = resultGroups
+    .filter((g) => !g.isIncome && !g.isSystem && !g.isTransfer)
+    .reduce((sum, g) => sum + g.categories.reduce((gs, c) => gs + c.balance, 0), 0)
+  const rta = liquidCash - assignedExpenseTotal
+
+  // Compute cover items: expense categories with negative balance that can be funded to $0
+  const coverItems: CoverItem[] = resultGroups
+    .filter((g) => !g.isIncome && !g.isSystem && !g.isTransfer)
+    .flatMap((g) => g.categories)
+    .filter((cat) => !cat.isCCPayment && cat.balance < 0)
+    .map((cat) => ({
+      categoryId: cat.id,
+      newBudgeted: cat.budgeted - cat.balance, // brings balance to exactly 0
+      rtaCost: -cat.balance,                   // |balance| — how much RTA this consumes
+    }))
+
+  const currentMonth = new Date().toISOString().substring(0, 7)
 
   return (
     <div className="flex flex-col h-full">
@@ -255,23 +278,25 @@ export default async function BudgetPage({ params }: Props) {
           >
             ›
           </Link>
+          {month !== currentMonth && (
+            <Link
+              href={`/budget/${currentMonth}`}
+              className="text-[10px] text-[#8a8fad] hover:text-[#b3a1e6] border border-[#3a3b58] hover:border-[#b3a1e6] rounded px-1.5 py-0.5 transition-colors"
+              title="Go to current month"
+            >
+              Today
+            </Link>
+          )}
         </div>
 
         {/* Ready to Assign */}
-        <div className="text-right">
-          <p className="text-[10px] sm:text-xs text-[#8a8fad] uppercase tracking-wide">Ready to Assign</p>
-          <p
-            className={`text-lg sm:text-xl font-bold tabular-nums ${
-              rta < 0 ? 'text-[#ce6f8f]' : 'text-[#5ccc96]'
-            }`}
-          >
-            {formatMoney(rta)}
-          </p>
-        </div>
+        <RtaDisplay rta={rta} month={month} coverItems={coverItems} />
       </div>
 
-      {/* ── Budget table ── */}
-      <BudgetTable month={month} groups={resultGroups} />
+      {/* ── Budget table (or empty state if no accounts) ── */}
+      {budgetAccts.length === 0
+        ? <EmptyBudgetState />
+        : <BudgetTable month={month} groups={resultGroups} rta={rta} />}
     </div>
   )
 }
