@@ -40,6 +40,7 @@ export async function buildMonthlyContext(userId: string, month: string) {
         .select({
           id: transactions.id,
           date: transactions.date,
+          payee: transactions.payee,
           amount: transactions.amount,
           categoryId: transactions.categoryId,
           isTransfer: transactions.isTransfer,
@@ -134,7 +135,7 @@ export async function buildMonthlyContext(userId: string, month: string) {
     .sort((a, b) => (a.remainingDollars - b.remainingDollars)) // overspent first
     .slice(0, 20)
 
-  // Income sources with actual received amounts
+  // Income sources with actual received amounts (categorized)
   const incomeCategories = categoryRows
     .filter((c) => c.isIncome)
     .map((c) => ({
@@ -142,6 +143,18 @@ export async function buildMonthlyContext(userId: string, month: string) {
       receivedDollars: toDollars(incomeByCat[c.id] ?? 0),
     }))
     .filter((c) => c.receivedDollars > 0)
+
+  // Uncategorized inflows — group by payee so AI can identify income sources
+  const uncategorizedInflowsByPayee: Record<string, number> = {}
+  for (const t of txns) {
+    if (t.isTransfer || t.categoryId || t.amount <= 0) continue
+    const payee = t.payee?.trim() || 'Unknown'
+    uncategorizedInflowsByPayee[payee] = (uncategorizedInflowsByPayee[payee] ?? 0) + t.amount
+  }
+  const uncategorizedInflows = Object.entries(uncategorizedInflowsByPayee)
+    .map(([payee, mu]) => ({ payee, totalDollars: toDollars(mu) }))
+    .sort((a, b) => b.totalDollars - a.totalDollars)
+    .slice(0, 10)
 
   return {
     month,
@@ -154,6 +167,7 @@ export async function buildMonthlyContext(userId: string, month: string) {
       surplusOrDeficitDollars: toDollars(inflowsMu - outflowsMu),
     },
     incomeCategories,
+    uncategorizedInflows,
     expenseCategories,
     debtAccounts,
     liquidAccounts: userAccounts
