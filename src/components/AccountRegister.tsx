@@ -599,6 +599,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [relinkRequired, setRelinkRequired] = useState(connection?.requiresRelink ?? false)
   const [newAccountsAvailable, setNewAccountsAvailable] = useState(connection?.newAccountsAvailable ?? false)
   const [disconnecting, setDisconnecting] = useState(false)
+  const [repairing, setRepairing] = useState(false)
   const [showSecondary, setShowSecondary] = useState(false)
 
   const uncategorizedCount = isTracking ? 0 : txns.filter(
@@ -700,6 +701,25 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     }
   }
 
+  async function handleRepair() {
+    if (!confirm('This will delete all bank-imported transactions for every account at this bank and re-sync from scratch. Manual transactions are kept. Continue?')) return
+    setRepairing(true)
+    setSyncResult(null)
+    const res = await fetch('/api/plaid/repair', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    })
+    const data = await res.json()
+    setRepairing(false)
+    if (res.ok) {
+      setSyncResult(`Repaired: deleted ${data.deletedTransactions ?? 0} bad transactions across ${data.affectedAccounts ?? 1} accounts, re-synced cleanly`)
+      router.refresh()
+    } else {
+      setSyncResult(`Repair failed: ${data.error ?? 'unknown error'}`)
+    }
+  }
+
   async function handleRecategorizeAll() {
     if (!pendingRecat) return
     setRecatPending(true)
@@ -791,6 +811,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                            font-medium px-2.5 py-1.5 rounded-lg text-sm transition-colors"
               >
                 {showSecondary ? '×' : '⋯'}
+              </button>
+            )}
+            {!isTracking && connection && (
+              <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#ce6f8f]/60 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
+                onClick={handleRepair}
+                disabled={repairing || syncing}
+                title="Delete all bank-imported transactions for this bank and re-sync from scratch. Fixes crossed transactions between accounts."
+              >
+                {repairing ? 'Repairing…' : '⚠ Repair'}
               </button>
             )}
             {!isTracking && (
