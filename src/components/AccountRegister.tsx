@@ -701,6 +701,26 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     }
   }
 
+  async function handleClearTransactions() {
+    if (!confirm('Delete all bank-imported transactions from this account only? Your categories are saved and restored when you sync. Manual transactions are kept.')) return
+    setRepairing(true)
+    setSyncResult(null)
+    // Save importId→categoryId, delete Plaid transactions for THIS account only, restore after sync
+    const saveRes = await fetch('/api/plaid/clear-account-transactions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ accountId: account.id }),
+    })
+    const saveData = await saveRes.json()
+    setRepairing(false)
+    if (saveRes.ok) {
+      setSyncResult(`Cleared ${saveData.deleted ?? 0} imported transactions — press Sync to re-import`)
+      router.refresh()
+    } else {
+      setSyncResult(`Clear failed: ${saveData.error ?? 'unknown error'}`)
+    }
+  }
+
   async function handleRepair() {
     if (!confirm('This will delete all bank-imported transactions for every account at this bank and re-sync from scratch. Manual transactions are kept. Continue?')) return
     setRepairing(true)
@@ -811,6 +831,17 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                            font-medium px-2.5 py-1.5 rounded-lg text-sm transition-colors"
               >
                 {showSecondary ? '×' : '⋯'}
+              </button>
+            )}
+            {!isTracking && (
+              <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#ce6f8f]/60 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
+                onClick={handleClearTransactions}
+                disabled={repairing || syncing}
+                title="Delete all bank-imported transactions from this account only. Press Sync after to re-import correctly."
+              >
+                {repairing ? 'Clearing…' : '✗ Clear transactions'}
               </button>
             )}
             {!isTracking && connection && (
