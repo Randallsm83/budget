@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { and, eq, isNotNull, inArray } from 'drizzle-orm'
+import { and, eq, isNotNull, isNull, inArray } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
-import { importConnections, transactions } from '@/db/schema'
+import { accounts, importConnections, transactions } from '@/db/schema'
 import { syncTransactions } from '@/lib/plaid-sync'
 import { plaidLog } from '@/lib/plaid-logger'
 
@@ -10,11 +10,12 @@ import { plaidLog } from '@/lib/plaid-logger'
  * POST /api/plaid/repair
  * { accountId: string }
  *
- * Finds the Plaid Item for the given account, wipes ALL Plaid-imported
- * transactions (have importId) from every account on that Item, clears
- * sync cursors, and re-syncs from scratch so each account gets only its
- * own transactions.
+ * Cleans ALL user accounts that have any Plaid-imported transactions
+ * (importId set), saves their categories, resets cursors, and re-syncs
+ * every active connection from scratch.
  *
+ * Handles accounts with missing/deleted importConnections rows
+ * (from hard-delete before soft-disconnect fix).
  * Manual transactions (no importId) are never touched.
  */
 export async function POST(req: NextRequest) {
@@ -22,30 +23,18 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
 
-  const { accountId } = await req.json() as { accountId: string }
+  // Get ALL user accounts that have any Plaid-imported transactions
+  const allUserAccounts = await db
+    .select({ id: accounts.id })
+    .from(accounts)
+    .where(eq(accounts.userId, userId))
 
-  // Find the connection for the given account
-  const conn = await db.query.importConnections.findFirst({
-    where: and(eq(importConnections.accountId, accountId), eq(importConnections.userId, userId)),
+  const affectedAccountIds = allUserAccounts.map((a) => a.id)
+
+  // All active connections (have an access token) — these will be re-synced
+  const allConns = await db.query.importConnections.findMany({
+    where: and(eq(importConnections.userId, userId), isNotNull(importConnections.accessTokenEncrypted)),
   })
-  if (!conn?.accessTokenEncrypted) {
-    return NextResponse.json({ error: 'No active bank connection for this account' }, { status: 404 })
-  }
-
-  // Find all connections sharing the same Plaid Item (all accounts at this bank)
-  const itemConns = conn.plaidItemId
-    ? await db.query.importConnections.findMany({
-        where: and(eq(importConnections.plaidItemId, conn.plaidItemId), eq(importConnections.userId, userId)),
-      })
-    : [conn]
-
-  // Also include soft-disconnected connections (null token) for same institution
-  // They may have received bad transactions too
-  const allConns = itemConns
-
-  const affectedAccountIds = allConns
-    .map((c) => c.accountId)
-    .filter((id): id is string => id !== null)
 
   // Save importId → categoryId before deleting so we can restore user's categorizations
   const categoryByImportId = new Map<string, string>()
@@ -80,8 +69,8 @@ export async function POST(req: NextRequest) {
   plaidLog('info', {
     route: 'plaid/repair',
     userId,
-    plaidItemId: conn.plaidItemId ?? undefined,
     affectedAccounts: affectedAccountIds.length,
+    activeConnections: allConns.length,
     deletedTransactions: deletedTotal,
   })
 
