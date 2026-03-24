@@ -23,8 +23,10 @@ export function chatPrompt(userMessage: string, contextJson: string): string {
 
 export function insightsPrompt(contextJson: string): string {
   return [
-    'Generate 3 monthly budget insights as JSON array.',
-    'Each item: {title, summary, action, confidence}.',
+    'Generate 3 monthly budget insights.',
+    'Respond with ONLY a raw JSON array — no markdown, no prose, no explanation.',
+    'Each item must have exactly these fields: title (string), summary (string), action (string), confidence (number 0-1).',
+    'Example: [{"title":"...","summary":"...","action":"...","confidence":0.8}]',
     'Context JSON:',
     contextJson,
   ].join('\n')
@@ -34,8 +36,8 @@ export function debtPlanPrompt(contextJson: string, method: 'snowball' | 'avalan
   return [
     `Create a ${method} debt payoff plan.`,
     `Extra monthly debt payment in milliunits: ${monthlyPayment}.`,
-    'Return JSON object:',
-    '{method, monthlyPayment, projectedMonths, totalInterestEstimate, assumptions, steps}.',
+    'Respond with ONLY a raw JSON object — no markdown, no prose, no explanation.',
+    'Required fields: method ("snowball"|"avalanche"), monthlyPayment (integer milliunits), projectedMonths (integer), totalInterestEstimate (integer milliunits), assumptions (string[]), steps (string[]).',
     'Context JSON:',
     contextJson,
   ].join('\n')
