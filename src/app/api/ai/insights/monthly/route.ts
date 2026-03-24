@@ -17,34 +17,39 @@ export async function POST(req: NextRequest) {
   const month = body?.month?.trim()
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
 
-  const started = Date.now()
-  const context = await buildMonthlyContext(userId, month)
-  const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)))
-  const parsed = safeJsonParse<unknown[]>(raw, [])
+  try {
+    const started = Date.now()
+    const context = await buildMonthlyContext(userId, month)
+    const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)))
+    const parsed = safeJsonParse<unknown[]>(raw, [])
 
-  const insights = parsed
-    .map((p) => InsightSchema.safeParse(p))
-    .filter((r): r is { success: true; data: { title: string; summary: string; action: string; confidence: number } } => r.success)
-    .map((r) => r.data)
-    .slice(0, 3)
+    const insights = parsed
+      .map((p) => InsightSchema.safeParse(p))
+      .filter((r): r is { success: true; data: { title: string; summary: string; action: string; confidence: number } } => r.success)
+      .map((r) => r.data)
+      .slice(0, 3)
 
-  if (insights.length > 0) {
-    await db.insert(aiRecommendations).values(insights.map((i) => ({
+    if (insights.length > 0) {
+      await db.insert(aiRecommendations).values(insights.map((i) => ({
+        userId,
+        month,
+        type: 'insight',
+        payload: i,
+      })))
+    }
+
+    await db.insert(aiAuditEvents).values({
       userId,
-      month,
-      type: 'insight',
-      payload: i,
-    })))
+      route: '/api/ai/insights/monthly',
+      model: process.env.ANTHROPIC_MODEL ?? process.env.OPENAI_MODEL ?? 'unknown',
+      promptVersion: 'v1',
+      latencyMs: Date.now() - started,
+      safetyFlags: {},
+    })
+
+    return NextResponse.json({ insights })
+  } catch (e) {
+    console.error('[ai/insights]', e)
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'AI insights failed' }, { status: 500 })
   }
-
-  await db.insert(aiAuditEvents).values({
-    userId,
-    route: '/api/ai/insights/monthly',
-    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-    promptVersion: 'v1',
-    latencyMs: Date.now() - started,
-    safetyFlags: {},
-  })
-
-  return NextResponse.json({ insights })
 }

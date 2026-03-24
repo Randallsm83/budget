@@ -20,37 +20,42 @@ export async function POST(req: NextRequest) {
   if (!month || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
   if (!Number.isFinite(monthlyPayment) || monthlyPayment < 0) return NextResponse.json({ error: 'monthlyPayment must be >= 0 milliunits' }, { status: 400 })
 
-  const started = Date.now()
-  const context = await buildMonthlyContext(userId, month)
-  const raw = await generateText(
-    systemPrompt(),
-    debtPlanPrompt(JSON.stringify(context), method, monthlyPayment),
-  )
-  const candidate = safeJsonParse(raw, {
-    method,
-    monthlyPayment,
-    projectedMonths: 1,
-    totalInterestEstimate: 0,
-    assumptions: ['Insufficient data; fallback estimate used.'],
-    steps: ['Provide debt APR and minimum payment details for better projections.'],
-  })
-  const parsed = DebtPlanSchema.safeParse(candidate)
-  if (!parsed.success) return NextResponse.json({ error: 'Could not generate structured debt plan' }, { status: 422 })
+  try {
+    const started = Date.now()
+    const context = await buildMonthlyContext(userId, month)
+    const raw = await generateText(
+      systemPrompt(),
+      debtPlanPrompt(JSON.stringify(context), method, monthlyPayment),
+    )
+    const candidate = safeJsonParse(raw, {
+      method,
+      monthlyPayment,
+      projectedMonths: 1,
+      totalInterestEstimate: 0,
+      assumptions: ['Insufficient data; fallback estimate used.'],
+      steps: ['Provide debt APR and minimum payment details for better projections.'],
+    })
+    const parsed = DebtPlanSchema.safeParse(candidate)
+    if (!parsed.success) return NextResponse.json({ error: 'Could not generate structured debt plan' }, { status: 422 })
 
-  await db.insert(aiRecommendations).values({
-    userId,
-    month,
-    type: 'debt',
-    payload: parsed.data,
-  })
-  await db.insert(aiAuditEvents).values({
-    userId,
-    route: '/api/ai/debt-plan',
-    model: process.env.OPENAI_MODEL ?? 'gpt-4o-mini',
-    promptVersion: 'v1',
-    latencyMs: Date.now() - started,
-    safetyFlags: {},
-  })
+    await db.insert(aiRecommendations).values({
+      userId,
+      month,
+      type: 'debt',
+      payload: parsed.data,
+    })
+    await db.insert(aiAuditEvents).values({
+      userId,
+      route: '/api/ai/debt-plan',
+      model: process.env.ANTHROPIC_MODEL ?? process.env.OPENAI_MODEL ?? 'unknown',
+      promptVersion: 'v1',
+      latencyMs: Date.now() - started,
+      safetyFlags: {},
+    })
 
-  return NextResponse.json({ plan: parsed.data })
+    return NextResponse.json({ plan: parsed.data })
+  } catch (e) {
+    console.error('[ai/debt-plan]', e)
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'AI debt plan failed' }, { status: 500 })
+  }
 }
