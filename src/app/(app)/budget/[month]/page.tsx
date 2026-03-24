@@ -7,6 +7,8 @@ import Link from 'next/link'
 import { BudgetTable, type GroupRow } from '@/components/BudgetTable'
 import { RtaDisplay, type CoverItem } from '@/components/RtaDisplay'
 import { EmptyBudgetState } from '@/components/EmptyBudgetState'
+import { BudgetInsightsCard } from '@/components/BudgetInsightsCard'
+import { AIAssistantPanel } from '@/components/AIAssistantPanel'
 import { ensureCCPaymentCategories } from '@/lib/actions'
 import {
   firstDayOfNextMonth,
@@ -297,6 +299,14 @@ export default async function BudgetPage({ params }: Props) {
       {budgetAccts.length === 0
         ? <EmptyBudgetState />
         : <BudgetTable month={month} groups={resultGroups} rta={rta} />}
+
+      {/* ── AI panels ── */}
+      {budgetAccts.length > 0 && (
+        <div className="flex-shrink-0 grid grid-cols-1 lg:grid-cols-2 gap-3 px-4 sm:px-6 py-4 border-t border-[#3a3b58]">
+          <BudgetInsightsCard month={month} />
+          <AIAssistantPanel month={month} />
+        </div>
+      )}
     </div>
   )
 }
