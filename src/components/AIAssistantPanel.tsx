@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useTransition } from 'react'
+import { useEffect, useState, useTransition } from 'react'
 
 interface Message {
   role: 'user' | 'assistant'
@@ -29,12 +29,47 @@ function ProseContent({ text }: { text: string }) {
   )
 }
 
-export function AIAssistantPanel({ month }: { month: string }) {
+interface AIAssistantPanelProps {
+  month: string
+  pendingMessage?: string
+  onPendingMessageConsumed?: () => void
+}
+
+export function AIAssistantPanel({ month, pendingMessage, onPendingMessageConsumed }: AIAssistantPanelProps) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
   const [isPending, startTransition] = useTransition()
   const [error, setError] = useState('')
+
+  useEffect(() => {
+    if (!pendingMessage) return
+    setInput(pendingMessage)
+    onPendingMessageConsumed?.()
+    // auto-send after a tick so input state has settled
+    setTimeout(() => {
+      const text = pendingMessage.trim()
+      if (!text) return
+      setInput('')
+      setMessages((prev) => [...prev, { role: 'user', content: text }])
+      startTransition(async () => {
+        try {
+          const res = await fetch('/api/ai/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ message: text, month, conversationId }),
+          })
+          const data = await res.json()
+          if (!res.ok) throw new Error(data.error ?? 'AI chat failed')
+          setConversationId((id) => data.conversationId ?? id)
+          setMessages((prev) => [...prev, { role: 'assistant', content: data.message ?? 'No response.' }])
+        } catch (e) {
+          setError(e instanceof Error ? e.message : 'AI chat failed')
+        }
+      })
+    }, 0)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pendingMessage])
 
   function send() {
     const text = input.trim()
