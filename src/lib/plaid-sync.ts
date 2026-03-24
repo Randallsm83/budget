@@ -30,6 +30,13 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
   const accountId: string = connection.accountId
   const plaidAccountId = connection.plaidAccountId ?? undefined
 
+  // Safety: without plaidAccountId we would dump ALL item transactions into this
+  // account (filter becomes () => true). Bail out rather than corrupt the register.
+  if (!plaidAccountId) {
+    plaidLog('warn', { route: 'plaid-sync/transactions', userId, accountId, msg: 'skipped sync — connection has no plaidAccountId' })
+    return { error: 'Connection has no plaidAccountId — re-link the account to repair' }
+  }
+
   const isFirstSync = !connection.cursor
   let cursor: string | undefined = connection.cursor ?? undefined
   let hasMore = true
