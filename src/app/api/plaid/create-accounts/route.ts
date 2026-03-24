@@ -65,13 +65,15 @@ export async function POST(req: NextRequest) {
         // Reconnect: restore the token on the existing connection row
         await db
           .update(importConnections)
-          .set({ plaidItemId, accessTokenEncrypted, cursor: null, requiresRelink: false })
+          .set({ plaidItemId, accessTokenEncrypted, plaidAccountId: pa.account_id, cursor: null, requiresRelink: false })
           .where(eq(importConnections.id, existingConn.id))
-        // Refresh the account balance from Plaid
-        await db
-          .update(accounts)
-          .set({ balance, clearedBalance: balance, updatedAt: new Date() })
-          .where(eq(accounts.id, existingConn.accountId))
+        // Only update balance if Plaid actually returned one — never overwrite with null-derived zero
+        if (pa.balances.current !== null && pa.balances.current !== undefined) {
+          await db
+            .update(accounts)
+            .set({ balance, clearedBalance: balance, updatedAt: new Date() })
+            .where(eq(accounts.id, existingConn.accountId))
+        }
         const acct = await db.query.accounts.findFirst({ where: eq(accounts.id, existingConn.accountId) })
         if (acct) created.push({ id: acct.id, name: acct.name, type: acct.type, reconnected: true })
         continue
