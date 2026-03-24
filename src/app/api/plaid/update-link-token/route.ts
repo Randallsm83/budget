@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { CountryCode } from 'plaid'
+import { CountryCode, Products } from 'plaid'
 import { and, eq } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { plaidClient } from '@/lib/plaid'
@@ -36,6 +36,9 @@ export async function POST(req: NextRequest) {
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',
+      // Request additional product consent so users can unlock liabilities/investments
+      // data on cards that were linked before these products were enabled.
+      optional_products: [Products.Investments, Products.Liabilities],
       ...(accountSelectionEnabled ? { update: { account_selection_enabled: true } } : {}),
       ...(process.env.PLAID_REDIRECT_URI
         ? { redirect_uri: process.env.PLAID_REDIRECT_URI }
