@@ -536,8 +536,9 @@ export async function deleteAccount(id: string) {
  * Disconnects the Plaid bank connection for an account without deleting the
  * account or its transactions. Calls /item/remove on the whole Item (all
  * accounts at the same institution share one Item), deletes Plaid-fetched data
- * (holdings, liability details), and removes the importConnections rows so no
- * access tokens remain in the database.
+ * (holdings, liability details), and nulls out the access token on the
+ * importConnections rows (soft-disconnect) so they can be matched by
+ * plaidAccountId when the user reconnects the same bank later.
  */
 export async function disconnectPlaidConnection(accountId: string): Promise<void> {
   const userId = await requireUser()
@@ -557,27 +558,26 @@ export async function disconnectPlaidConnection(accountId: string): Promise<void
       })
     : [conn]
 
-  // Call /item/remove — deactivates the Item for all accounts at this institution
+  // Revoke the Item at Plaid — invalidates the access token for all accounts at this bank
   if (conn.accessTokenEncrypted) {
     await removeItem(conn.accessTokenEncrypted)
   }
 
-  // Delete Plaid-sourced data for all affected accounts (data retention: no
-  // business need to keep API-fetched market/liability data without the connection)
+  // Delete Plaid-sourced data for all affected accounts
   const affectedIds = itemConns.map((c) => c.accountId).filter((aid): aid is string => aid !== null)
   if (affectedIds.length > 0) {
     await db.delete(investmentHoldings).where(inArray(investmentHoldings.accountId, affectedIds))
     await db.delete(liabilityDetails).where(inArray(liabilityDetails.accountId, affectedIds))
   }
 
-  // Delete all connection rows for this Item — removes access tokens from DB
-  if (conn.plaidItemId) {
-    await db
-      .delete(importConnections)
-      .where(and(eq(importConnections.plaidItemId, conn.plaidItemId), eq(importConnections.userId, userId)))
-  } else {
-    await db.delete(importConnections).where(eq(importConnections.id, conn.id))
-  }
+  // Soft-disconnect: null out the token + cursor but keep the row.
+  // plaidAccountId survives so create-accounts can match these accounts
+  // when the user reconnects the same bank, preventing duplicate account creation.
+  const itemConnIds = itemConns.map((c) => c.id)
+  await db
+    .update(importConnections)
+    .set({ accessTokenEncrypted: null, plaidItemId: null, cursor: null, lastSyncedAt: null, requiresRelink: false })
+    .where(inArray(importConnections.id, itemConnIds))
 
   revalidatePath('/accounts')
   revalidatePath(`/accounts/${accountId}`)
