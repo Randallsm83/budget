@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { and, eq, isNotNull, isNull } from 'drizzle-orm'
+import { and, eq, isNotNull, inArray } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { importConnections, transactions } from '@/db/schema'
@@ -47,6 +47,20 @@ export async function POST(req: NextRequest) {
     .map((c) => c.accountId)
     .filter((id): id is string => id !== null)
 
+  // Save importId → categoryId before deleting so we can restore user's categorizations
+  const categoryByImportId = new Map<string, string>()
+  for (const acctId of affectedAccountIds) {
+    const rows = await db
+      .select({ importId: transactions.importId, categoryId: transactions.categoryId })
+      .from(transactions)
+      .where(and(eq(transactions.accountId, acctId), isNotNull(transactions.importId)))
+    for (const row of rows) {
+      if (row.importId && row.categoryId) {
+        categoryByImportId.set(row.importId, row.categoryId)
+      }
+    }
+  }
+
   let deletedTotal = 0
   for (const acctId of affectedAccountIds) {
     const result = await db
@@ -79,10 +93,32 @@ export async function POST(req: NextRequest) {
     syncResults[c.accountId] = result
   }
 
+  // Restore saved category assignments by importId
+  let restoredCategories = 0
+  if (categoryByImportId.size > 0) {
+    const importIds = [...categoryByImportId.keys()]
+    const reinserted = await db
+      .select({ id: transactions.id, importId: transactions.importId })
+      .from(transactions)
+      .where(inArray(transactions.importId, importIds))
+    for (const txn of reinserted) {
+      if (!txn.importId) continue
+      const savedCategoryId = categoryByImportId.get(txn.importId)
+      if (savedCategoryId) {
+        await db
+          .update(transactions)
+          .set({ categoryId: savedCategoryId })
+          .where(eq(transactions.id, txn.id))
+        restoredCategories++
+      }
+    }
+  }
+
   return NextResponse.json({
     success: true,
     affectedAccounts: affectedAccountIds.length,
     deletedTransactions: deletedTotal,
+    restoredCategories,
     syncResults,
   })
 }
