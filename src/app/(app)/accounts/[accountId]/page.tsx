@@ -4,6 +4,7 @@ import { accounts, transactions, categories, categoryGroups, importConnections, 
 import { and, asc, desc, eq } from 'drizzle-orm'
 import { notFound } from 'next/navigation'
 import { AccountRegister } from '@/components/AccountRegister'
+import { DebtPaydownCard } from '@/components/DebtPaydownCard'
 
 interface Props {
   params: Promise<{ accountId: string }>
@@ -83,7 +84,11 @@ export default async function AccountRegisterPage({ params }: Props) {
     .where(eq(categories.userId, userId))
     .orderBy(asc(categoryGroups.sortOrder), asc(categories.sortOrder))
 
+  const currentMonth = new Date().toISOString().substring(0, 7)
+  const isDebtAccount = account.type === 'credit_card' || account.type === 'loan'
+
   return (
+    <>
     <AccountRegister
       account={{ id: account.id, name: account.name, type: account.type, balance: account.balance, clearedBalance: account.clearedBalance }}
       connection={connection ? { id: connection.id, lastSyncedAt: connection.lastSyncedAt?.toISOString() ?? null, requiresRelink: connection.requiresRelink, newAccountsAvailable: connection.newAccountsAvailable } : null}
@@ -130,5 +135,11 @@ export default async function AccountRegisterPage({ params }: Props) {
         syncedAt: liability.syncedAt.toISOString(),
       } : null}
     />
+    {isDebtAccount && (
+      <div className="px-4 sm:px-6 py-4 border-t border-[#3a3b58]">
+        <DebtPaydownCard month={currentMonth} />
+      </div>
+    )}
+    </>
   )
 }

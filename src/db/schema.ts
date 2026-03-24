@@ -218,6 +218,60 @@ export const liabilityDetails = pgTable(
 )
 
 // ---------------------------------------------------------------------------
+// AI assistant persistence
+// ---------------------------------------------------------------------------
+export const aiConversations = pgTable('ai_conversations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  title: text('title').notNull().default('New conversation'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+export const aiMessages = pgTable('ai_messages', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  conversationId: uuid('conversation_id')
+    .notNull()
+    .references(() => aiConversations.id, { onDelete: 'cascade' }),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  role: text('role').notNull(),
+  content: text('content').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
+export const aiRecommendations = pgTable('ai_recommendations', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  month: text('month').notNull(),
+  type: text('type').notNull(),
+  payload: jsonb('payload').notNull(),
+  dismissed: boolean('dismissed').notNull().default(false),
+  applied: boolean('applied').notNull().default(false),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+  updatedAt: timestamp('updated_at').notNull().defaultNow(),
+})
+
+export const aiAuditEvents = pgTable('ai_audit_events', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id')
+    .notNull()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  route: text('route').notNull(),
+  model: text('model'),
+  promptVersion: text('prompt_version'),
+  latencyMs: integer('latency_ms'),
+  tokenUsage: integer('token_usage'),
+  safetyFlags: jsonb('safety_flags'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+// ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
 export const usersRelations = relations(users, ({ many }) => ({
@@ -230,6 +284,10 @@ export const usersRelations = relations(users, ({ many }) => ({
   payeeRules: many(payeeRules),
   investmentHoldings: many(investmentHoldings),
   liabilityDetails: many(liabilityDetails),
+  aiConversations: many(aiConversations),
+  aiMessages: many(aiMessages),
+  aiRecommendations: many(aiRecommendations),
+  aiAuditEvents: many(aiAuditEvents),
 }))
 
 export const accountsRelations = relations(accounts, ({ one, many }) => ({
@@ -301,4 +359,22 @@ export const investmentHoldingsRelations = relations(investmentHoldings, ({ one 
 export const liabilityDetailsRelations = relations(liabilityDetails, ({ one }) => ({
   user: one(users, { fields: [liabilityDetails.userId], references: [users.id] }),
   account: one(accounts, { fields: [liabilityDetails.accountId], references: [accounts.id] }),
+}))
+
+export const aiConversationsRelations = relations(aiConversations, ({ one, many }) => ({
+  user: one(users, { fields: [aiConversations.userId], references: [users.id] }),
+  messages: many(aiMessages),
+}))
+
+export const aiMessagesRelations = relations(aiMessages, ({ one }) => ({
+  user: one(users, { fields: [aiMessages.userId], references: [users.id] }),
+  conversation: one(aiConversations, { fields: [aiMessages.conversationId], references: [aiConversations.id] }),
+}))
+
+export const aiRecommendationsRelations = relations(aiRecommendations, ({ one }) => ({
+  user: one(users, { fields: [aiRecommendations.userId], references: [users.id] }),
+}))
+
+export const aiAuditEventsRelations = relations(aiAuditEvents, ({ one }) => ({
+  user: one(users, { fields: [aiAuditEvents.userId], references: [users.id] }),
 }))
