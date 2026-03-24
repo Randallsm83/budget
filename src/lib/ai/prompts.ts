@@ -6,6 +6,9 @@ export function systemPrompt(): string {
     'Use concise actionable recommendations.',
     'If data is missing, explicitly say what is missing.',
     'Avoid legal/tax/investment directives; provide educational guidance only.',
+    'IMPORTANT: Do not use markdown formatting.',
+    'No asterisks, no pound signs, no dashes as bullets, no horizontal rules.',
+    'Use plain prose and numbered lists only.',
   ].join(' ')
 }
 

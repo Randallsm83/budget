@@ -7,6 +7,28 @@ interface Message {
   content: string
 }
 
+// Renders plain-text AI responses: strips stray markdown symbols,
+// splits on newlines, and renders numbered/bulleted list items distinctly.
+function ProseContent({ text }: { text: string }) {
+  // Strip common markdown artifacts the model sneaks in despite instructions
+  const clean = text
+    .replace(/\*\*(.+?)\*\*/g, '$1')   // **bold** → plain
+    .replace(/\*(.+?)\*/g, '$1')        // *italic* → plain
+    .replace(/^#{1,3}\s+/gm, '')        // ## heading → plain
+    .replace(/^---+$/gm, '')            // horizontal rules
+    .replace(/^[\-\*]\s+/gm, '• ')     // - bullet → •
+
+  const lines = clean.split('\n').filter((l) => l.trim() !== '')
+
+  return (
+    <span className="block space-y-1">
+      {lines.map((line, i) => (
+        <span key={i} className="block leading-relaxed">{line}</span>
+      ))}
+    </span>
+  )
+}
+
 export function AIAssistantPanel({ month }: { month: string }) {
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -51,7 +73,7 @@ export function AIAssistantPanel({ month }: { month: string }) {
         {messages.map((m, i) => (
           <div key={i} className={`text-xs rounded px-2 py-1 ${m.role === 'user' ? 'bg-[#2a2b45] text-[#ecf0f1]' : 'bg-[#1a1b2e] text-[#c5cae9]'}`}>
             <span className="font-semibold mr-1">{m.role === 'user' ? 'You:' : 'Coach:'}</span>
-            {m.content}
+            {m.role === 'assistant' ? <ProseContent text={m.content} /> : m.content}
           </div>
         ))}
       </div>
