@@ -713,7 +713,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     const data = await res.json()
     setRepairing(false)
     if (res.ok) {
-      setSyncResult(`Repaired: deleted ${data.deletedTransactions ?? 0} bad transactions across ${data.affectedAccounts ?? 1} accounts, re-synced cleanly`)
+      setSyncResult(`Repaired: ${data.affectedAccounts ?? 1} accounts re-synced cleanly, ${data.restoredCategories ?? 0} categories restored`)
       router.refresh()
     } else {
       setSyncResult(`Repair failed: ${data.error ?? 'unknown error'}`)
