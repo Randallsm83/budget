@@ -135,6 +135,8 @@ export default function AccountsPage() {
   const [loading, setLoading] = useState(true)
   const [showModal, setShowModal] = useState(false)
   const [showClosed, setShowClosed] = useState(false)
+  const [cleaningUp, setCleaningUp] = useState(false)
+  const [cleanupMsg, setCleanupMsg] = useState('')
   const [, startTransition] = useTransition()
   const [errors, setErrors] = useState<Record<string, string>>({})
 
@@ -154,6 +156,21 @@ export default function AccountsPage() {
 
   function handleClose(id: string) {
     startTransition(async () => { await closeAccount(id); router.refresh(); loadAccounts() })
+  }
+
+  async function handleCleanupOrphans() {
+    setCleaningUp(true)
+    setCleanupMsg('')
+    const res = await fetch('/api/plaid/cleanup-orphans', { method: 'POST' })
+    const data = await res.json()
+    setCleaningUp(false)
+    if (res.ok) {
+      setCleanupMsg(data.message ?? 'Done')
+      loadAccounts()
+      router.refresh()
+    } else {
+      setCleanupMsg(data.error ?? 'Failed')
+    }
   }
 
   function handleDelete(id: string, name: string) {
@@ -194,12 +211,23 @@ export default function AccountsPage() {
             </p>
           )}
         </div>
-        <button
-          onClick={() => setShowModal(true)}
-          className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
-        >
-          + Add Account
-        </button>
+        <div className="flex items-center gap-2">
+          {cleanupMsg && <span className="text-xs text-[#8a8fad]">{cleanupMsg}</span>}
+          <button
+            onClick={handleCleanupOrphans}
+            disabled={cleaningUp}
+            title="Delete empty accounts with no bank connection (orphaned duplicates from reconnect issues)"
+            className="border border-[#ce6f8f]/50 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f] font-medium px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+          >
+            {cleaningUp ? 'Cleaning…' : '⚠ Clean up orphans'}
+          </button>
+          <button
+            onClick={() => setShowModal(true)}
+            className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"
+          >
+            + Add Account
+          </button>
+        </div>
       </div>
 
       {/* Body */}
