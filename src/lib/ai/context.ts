@@ -53,34 +53,48 @@ export async function buildMonthlyContext(userId: string, month: string) {
         ))
 
   const budgetMap = new Map(budgets.map((b) => [b.categoryId, b.budgeted]))
-  const catMap = new Map(categoryRows.map((c) => [c.id, c]))
 
-  let inflows = 0
-  let outflows = 0
-  let categorizedSpend = 0
+  // All DB amounts are INTEGER MILLIUNITS (1000 = $1.00). Convert to dollars for the AI.
+  const toDollars = (mu: number) => parseFloat((mu / 1000).toFixed(2))
+
+  let inflowsMu = 0
+  let outflowsMu = 0
+  let categorizedSpendMu = 0
   for (const t of txns) {
     if (t.isTransfer) continue
-    if (t.amount > 0) inflows += t.amount
-    if (t.amount < 0) outflows += Math.abs(t.amount)
-    if (t.amount < 0 && t.categoryId) categorizedSpend += Math.abs(t.amount)
+    if (t.amount > 0) inflowsMu += t.amount
+    if (t.amount < 0) outflowsMu += Math.abs(t.amount)
+    if (t.amount < 0 && t.categoryId) categorizedSpendMu += Math.abs(t.amount)
   }
 
-  const expenseBudgeted = categoryRows
+  const expenseBudgetedMu = categoryRows
     .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
     .reduce((sum, c) => sum + (budgetMap.get(c.id) ?? 0), 0)
 
   const debtAccounts = userAccounts
     .filter((a) => a.type === 'credit_card' || a.type === 'loan')
-    .map((a) => ({ ...a, owed: Math.abs(Math.min(0, a.balance)) }))
+    .map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      balanceDollars: toDollars(a.balance),
+      owedDollars: toDollars(Math.abs(Math.min(0, a.balance))),
+    }))
 
   return {
     month,
-    accounts: userAccounts,
+    note: 'All dollar amounts are in USD. Do not re-scale them.',
+    accounts: userAccounts.map((a) => ({
+      id: a.id,
+      name: a.name,
+      type: a.type,
+      balanceDollars: toDollars(a.balance),
+    })),
     totals: {
-      inflows,
-      outflows,
-      categorizedSpend,
-      expenseBudgeted,
+      inflowsDollars: toDollars(inflowsMu),
+      outflowsDollars: toDollars(outflowsMu),
+      categorizedSpendDollars: toDollars(categorizedSpendMu),
+      expenseBudgetedDollars: toDollars(expenseBudgetedMu),
     },
     debtAccounts,
     transactionCount: txns.length,
@@ -93,8 +107,7 @@ export async function buildMonthlyContext(userId: string, month: string) {
         id: c.id,
         name: c.name,
         groupName: c.groupName ?? 'Uncategorized',
-        budgeted: budgetMap.get(c.id) ?? 0,
+        budgetedDollars: toDollars(budgetMap.get(c.id) ?? 0),
       })),
-    _catMapSize: catMap.size,
   }
 }
