@@ -204,6 +204,23 @@ export default async function BudgetPage({ params }: Props) {
     targetCCAutoFund[ccPayCatId] = ccAutoFundMap[month]?.[ccPayCatId] ?? 0
   }
 
+  // -------------------------------------------------------------------------
+  // Budget suggestions: 3-month average spending per expense category
+  // Only computed for expense categories that have at least 1 month of history.
+  // -------------------------------------------------------------------------
+  const completeMonths = sortedMonths.filter((m) => m < month)
+  const last3 = completeMonths.slice(-3)
+  const suggestedBudgets: Record<string, number> = {}
+  for (const catId of allCategoryIds) {
+    if (incomeCatIds.has(catId)) continue
+    const spends = last3
+      .map((m) => Math.abs(Math.min(0, activityMap[m]?.[catId] ?? 0)))
+      .filter((v) => v > 0)
+    if (spends.length === 0) continue
+    const avg = Math.round(spends.reduce((s, v) => s + v, 0) / spends.length)
+    if (avg > 0) suggestedBudgets[catId] = avg
+  }
+
   const resultGroups: GroupRow[] = groups
     .filter((g) => !g.isTransfer || g.isSystem) // hide legacy transfer groups
     .map((g) => {
@@ -219,6 +236,7 @@ export default async function BudgetPage({ params }: Props) {
           ? (ccActualBalance.get(cat.ccAccountId) ?? 0)
           : (balanceMap[cat.id] ?? 0),
         isCCPayment: !!cat.ccAccountId,
+        suggested: suggestedBudgets[cat.id],
       }))
       return {
         id: g.id,

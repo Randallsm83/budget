@@ -41,6 +41,14 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# one-off admin/data-fix scripts (keep locally, do not commit)
+scripts/fix-*.ts
+scripts/cleanup-*.ts
+scripts/list-*.ts
+scripts/merge-*.ts
+scripts/reset-*.ts
+scripts/show-*.ts
+
 # un-ignore src/lib (blocked by global gitignore lib/ rule)
 !src/lib/
 !src/lib/**

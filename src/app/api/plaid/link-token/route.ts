@@ -13,7 +13,11 @@ export async function POST() {
       user: { client_user_id: session.user.id },
       client_name: 'Coffer',
       products: [Products.Transactions],
-      optional_products: [Products.Investments, Products.Liabilities],
+      // additional_consented_products: user consents during Link, but Plaid only bills
+      // when the endpoint is first called — not on item creation. This avoids charging
+      // for Investments/Liabilities on users who only have a checking account.
+      // Do NOT use optional_products here — that bills on item creation.
+      additional_consented_products: [Products.Investments, Products.Liabilities],
       country_codes: [CountryCode.Us],
       language: 'en',
       ...(process.env.PLAID_REDIRECT_URI

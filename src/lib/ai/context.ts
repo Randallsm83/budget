@@ -1,7 +1,7 @@
 import { and, asc, eq, gte, lt, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts, monthBudgets, transactions, categories, categoryGroups, liabilityDetails } from '@/db/schema'
-import { firstDayOfNextMonth } from '@/lib/budget'
+import { firstDayOfNextMonth, prevMonth } from '@/lib/budget'
 
 export async function buildMonthlyContext(userId: string, month: string) {
   const monthStart = `${month}-01`
@@ -87,6 +87,49 @@ export async function buildMonthlyContext(userId: string, month: string) {
     .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
     .reduce((sum, c) => sum + (budgetMap.get(c.id) ?? 0), 0)
 
+  // Historical context: last 3 complete months of per-category spending
+  const prev1 = prevMonth(month)
+  const prev2 = prevMonth(prev1)
+  const prev3 = prevMonth(prev2)
+  const histStart = `${prev3}-01`
+  const histEnd = monthStart // exclusive — only complete months before current
+
+  const histTxns = onBudgetIds.length === 0
+    ? []
+    : await db
+        .select({
+          date: transactions.date,
+          amount: transactions.amount,
+          categoryId: transactions.categoryId,
+          isTransfer: transactions.isTransfer,
+        })
+        .from(transactions)
+        .where(and(
+          eq(transactions.userId, userId),
+          inArray(transactions.accountId, onBudgetIds),
+          gte(transactions.date, histStart),
+          lt(transactions.date, histEnd),
+        ))
+
+  // Per-category spending per month for the last 3 months
+  const histActivity: Record<string, Record<string, number>> = {}
+  for (const t of histTxns) {
+    if (t.isTransfer || !t.categoryId || t.amount >= 0) continue
+    const m = t.date.substring(0, 7)
+    histActivity[m] ??= {}
+    histActivity[m][t.categoryId] = (histActivity[m][t.categoryId] ?? 0) + Math.abs(t.amount)
+  }
+
+  const histMonths = [prev3, prev2, prev1].filter((m) => histActivity[m] !== undefined)
+
+  // Spending pace for current month: days elapsed / days in month
+  const [y, mo] = month.split('-').map(Number)
+  const today = new Date()
+  const isCurrentMonth = today.getFullYear() === y && today.getMonth() + 1 === mo
+  const daysInMonth = new Date(y, mo, 0).getDate()
+  const daysElapsed = isCurrentMonth ? today.getDate() : daysInMonth
+  const pacePct = daysElapsed / daysInMonth // 0..1
+
   // Liability details (APR, minimum payment) for debt accounts
   const debtAccountIds = userAccounts
     .filter((a) => a.type === 'credit_card' || a.type === 'loan')
@@ -116,6 +159,21 @@ export async function buildMonthlyContext(userId: string, month: string) {
       }
     })
 
+  // Historical averages and spend pace per expense category
+  const expenseCatIds = categoryRows
+    .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
+    .map((c) => c.id)
+
+  const historicalAverages: Record<string, { avgSpentDollars: number; monthsUsed: number }> = {}
+  for (const catId of expenseCatIds) {
+    const monthlySpends = histMonths
+      .map((m) => histActivity[m]?.[catId] ?? 0)
+      .filter((v) => v > 0)
+    if (monthlySpends.length === 0) continue
+    const avg = monthlySpends.reduce((s, v) => s + v, 0) / monthlySpends.length
+    historicalAverages[catId] = { avgSpentDollars: toDollars(avg), monthsUsed: monthlySpends.length }
+  }
+
   // Expense categories: budget vs actual, sorted by overspend first
   const expenseCategories = categoryRows
     .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
@@ -123,12 +181,19 @@ export async function buildMonthlyContext(userId: string, month: string) {
       const budgetedMu = budgetMap.get(c.id) ?? 0
       const activityMu = activityByCat[c.id] ?? 0 // negative = spending
       const spentMu = Math.abs(Math.min(0, activityMu))
+      const hist = historicalAverages[c.id]
+      const projectedSpentDollars = pacePct > 0
+        ? parseFloat((toDollars(spentMu) / pacePct).toFixed(2))
+        : null
       return {
         name: c.name,
         groupName: c.groupName ?? 'Uncategorized',
         budgetedDollars: toDollars(budgetedMu),
         spentDollars: toDollars(spentMu),
         remainingDollars: toDollars(budgetedMu + activityMu), // positive = under budget
+        projectedMonthEndDollars: projectedSpentDollars,
+        historicalAvgDollars: hist?.avgSpentDollars ?? null,
+        historicalMonths: hist?.monthsUsed ?? 0,
       }
     })
     .filter((c) => c.budgetedDollars > 0 || c.spentDollars > 0) // only categories with activity
@@ -173,6 +238,12 @@ export async function buildMonthlyContext(userId: string, month: string) {
     liquidAccounts: userAccounts
       .filter((a) => ['checking', 'savings', 'cash'].includes(a.type))
       .map((a) => ({ name: a.name, balanceDollars: toDollars(a.balance) })),
+    spendingPace: {
+      daysElapsed,
+      daysInMonth,
+      pacePercent: parseFloat((pacePct * 100).toFixed(1)),
+      note: isCurrentMonth ? 'Pace is based on current date' : 'Past month — pace is 100%',
+    },
     transactionCount: txns.length,
     generatedAt: new Date().toISOString(),
   }

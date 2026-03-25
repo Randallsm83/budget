@@ -3,9 +3,11 @@
 import { useState, useEffect } from 'react'
 import { useRouter } from 'next/navigation'
 import { signOut } from 'next-auth/react'
+import { useAdminMode } from '@/lib/admin-mode'
 
 export default function SecuritySettingsPage() {
   const router = useRouter()
+  const [adminMode, toggleAdminMode] = useAdminMode()
   const [mfaEnabled, setMfaEnabled] = useState<boolean | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -228,6 +230,41 @@ export default function SecuritySettingsPage() {
           </form>
         )}
       </div>
+      {/* Admin tools */}
+      <div className="mt-8 bg-[#1f2039] border border-[#3a3b58] rounded-xl p-5">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-sm font-medium text-[#ecf0f1]">Admin Tools</p>
+            <p className="text-xs text-[#8a8fad] mt-0.5 max-w-sm">
+              Unlocks destructive actions on account pages: Clear transactions, Repair bank sync,
+              Enrich payees, and Clean up orphan accounts. Off by default.
+            </p>
+          </div>
+          <button
+            onClick={toggleAdminMode}
+            className={`relative inline-flex h-6 w-11 flex-shrink-0 cursor-pointer rounded-full border-2 border-transparent
+                        transition-colors duration-200 focus:outline-none ${
+                          adminMode ? 'bg-[#e39400]' : 'bg-[#3a3b58]'
+                        }`}
+            role="switch"
+            aria-checked={adminMode}
+            title={adminMode ? 'Disable admin tools' : 'Enable admin tools'}
+          >
+            <span
+              className={`pointer-events-none inline-block h-5 w-5 transform rounded-full bg-white shadow
+                          transition duration-200 ${
+                            adminMode ? 'translate-x-5' : 'translate-x-0'
+                          }`}
+            />
+          </button>
+        </div>
+        {adminMode && (
+          <p className="mt-3 text-[10px] text-[#e39400] bg-[#e39400]/10 border border-[#e39400]/20 rounded px-2.5 py-1.5">
+            Admin tools are ON — destructive actions are visible on account pages.
+          </p>
+        )}
+      </div>
+
       {/* Danger zone */}
       <div className="mt-8 bg-[#1f2039] border border-[#ce6f8f]/30 rounded-xl p-5">
         <p className="text-sm font-medium text-[#ecf0f1] mb-1">Delete Account</p>
