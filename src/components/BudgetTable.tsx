@@ -1,34 +1,9 @@
 'use client'
 
 import { useTransition, useState, useRef, useEffect } from 'react'
-import {
-  DndContext,
-  DragEndEvent,
-  PointerSensor,
-  TouchSensor,
-  useSensor,
-  useSensors,
-  closestCenter,
-} from '@dnd-kit/core'
-import {
-  SortableContext,
-  useSortable,
-  arrayMove,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable'
-import { CSS } from '@dnd-kit/utilities'
-import {
-  setBudgeted,
-  addCategory,
-  addCategoryGroup,
-  renameCategory,
-  renameCategoryGroup,
-  deleteCategory,
-  deleteCategoryGroup,
-  reorderGroups,
-  reorderCategories,
-} from '@/lib/actions'
+import { setBudgeted } from '@/lib/actions'
 import { formatMoney, parseMoney, getBankBrand } from '@/lib/budget'
+import Link from 'next/link'
 
 export interface CategoryRow {
   id: string
@@ -53,86 +28,7 @@ export interface GroupRow {
 }
 
 // ---------------------------------------------------------------------------
-// Drag handle (6-dot grip icon)
-// ---------------------------------------------------------------------------
-function GripIcon() {
-  return (
-    <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor" aria-hidden="true">
-      <circle cx="3" cy="3"  r="1.3" />
-      <circle cx="7" cy="3"  r="1.3" />
-      <circle cx="3" cy="7"  r="1.3" />
-      <circle cx="7" cy="7"  r="1.3" />
-      <circle cx="3" cy="11" r="1.3" />
-      <circle cx="7" cy="11" r="1.3" />
-    </svg>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Sortable wrappers
-// ---------------------------------------------------------------------------
-type DragSlot = { dragHandle: React.ReactNode }
-
-function SortableCatItem({ id, children }: { id: string; children: (s: DragSlot) => React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-        zIndex: isDragging ? 10 : undefined,
-        position: 'relative',
-      }}
-    >
-      {children({
-        dragHandle: (
-          <button
-            {...attributes}
-            {...listeners}
-            title="Drag to reorder"
-            className="cursor-grab active:cursor-grabbing text-[#3a3b58] hover:text-[#8a8fad] touch-none flex-shrink-0 sm:opacity-0 sm:group-hover/cat:opacity-100 transition-opacity"
-          >
-            <GripIcon />
-          </button>
-        ),
-      })}
-    </div>
-  )
-}
-
-function SortableGroupItem({ id, children }: { id: string; children: (s: DragSlot) => React.ReactNode }) {
-  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id })
-  return (
-    <div
-      ref={setNodeRef}
-      style={{
-        transform: CSS.Transform.toString(transform),
-        transition,
-        opacity: isDragging ? 0.4 : 1,
-        zIndex: isDragging ? 10 : undefined,
-        position: 'relative',
-      }}
-    >
-      {children({
-        dragHandle: (
-          <button
-            {...attributes}
-            {...listeners}
-            title="Drag to reorder group"
-            className="cursor-grab active:cursor-grabbing text-[#3a3b58] hover:text-[#8a8fad] touch-none flex-shrink-0 sm:opacity-0 sm:group-hover/grp:opacity-100 transition-opacity"
-          >
-            <GripIcon />
-          </button>
-        ),
-      })}
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Inline editable cell
+// Inline editable budget amount cell
 // ---------------------------------------------------------------------------
 function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-28' }: {
   categoryId: string; month: string; value: number; suggested?: number; className?: string
@@ -146,7 +42,6 @@ function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-
 
   useEffect(() => { if (editing) inputRef.current?.select() }, [editing])
 
-  // Flash a green ring for 800ms after the save transition completes
   useEffect(() => {
     if (wasP.current && !isPending) {
       setSavedFlash(true)
@@ -212,15 +107,12 @@ function Amount({ value, className = '' }: { value: number; className?: string }
 
 // ---------------------------------------------------------------------------
 // Cover-to-zero quick action button
-// Computes new budgeted = budgeted - balance, which always brings balance to $0.
 // ---------------------------------------------------------------------------
 function CoverButton({ categoryId, month, budgeted, balance, rta, className = '' }: {
   categoryId: string; month: string; budgeted: number; balance: number; rta: number; className?: string
 }) {
   const [isPending, startTransition] = useTransition()
-  // balance = prior + budgeted + activity → set budgeted to (budgeted - balance) to make new balance = 0
   const newBudgeted = budgeted - balance
-  // rta will decrease by |balance| (balance is negative, so -balance > 0)
   const rtaAfter = rta + balance
   const warn = rtaAfter < 0
 
@@ -245,172 +137,42 @@ function CoverButton({ categoryId, month, budgeted, balance, rta, className = ''
 }
 
 // ---------------------------------------------------------------------------
-// Inline text editor (rename)
+// Category item row — display only, no management actions
 // ---------------------------------------------------------------------------
-function InlineRename({ value, onSave, onCancel, className = '' }: {
-  value: string; onSave: (v: string) => void; onCancel: () => void; className?: string
+function CategoryItemRow({ cat, month, rta }: {
+  cat: CategoryRow; month: string; rta: number
 }) {
-  const [val, setVal] = useState(value)
-  const ref = useRef<HTMLInputElement>(null)
-  useEffect(() => { ref.current?.select() }, [])
-
-  function commit() {
-    const trimmed = val.trim()
-    if (trimmed && trimmed !== value) onSave(trimmed); else onCancel()
-  }
-  return (
-    <input
-      ref={ref} value={val}
-      onChange={(e) => setVal(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') onCancel() }}
-      className={`bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] rounded px-2 py-0.5
-                  focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] ${className}`}
-    />
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Add-category inline row
-// ---------------------------------------------------------------------------
-function AddCategoryRow({ groupId }: { groupId: string }) {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [isPending, startTransition] = useTransition()
-  const ref = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { if (open) ref.current?.focus() }, [open])
-
-  function commit() {
-    const trimmed = name.trim()
-    if (!trimmed) { setOpen(false); return }
-    startTransition(async () => { await addCategory(groupId, trimmed); setName(''); setOpen(false) })
-  }
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full text-left px-4 sm:px-6 py-1.5 text-xs text-[#8a8fad] hover:text-[#b3a1e6]
-                   hover:bg-[#1f2039] transition-colors border-b border-[#1f2039]"
-      >
-        + Add Category
-      </button>
-    )
-  }
-  return (
-    <div className="px-4 sm:px-6 py-1.5 border-b border-[#1f2039] flex items-center gap-2">
-      <input
-        ref={ref} value={name}
-        onChange={(e) => setName(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === 'Enter') commit(); if (e.key === 'Escape') { setOpen(false); setName('') } }}
-        placeholder="Category name…"
-        disabled={isPending}
-        className="flex-1 bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] text-sm rounded
-                   px-2 py-0.5 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] disabled:opacity-50"
-      />
-      <button onClick={() => { setOpen(false); setName('') }} className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1">✕</button>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Category item row — dual mobile card / desktop grid layout
-// ---------------------------------------------------------------------------
-function CategoryItemRow({ cat, month, rta, error, onSaveName, onDelete, dragHandle }: {
-  cat: CategoryRow; month: string; rta: number; error: string
-  onSaveName: (name: string) => void; onDelete: () => void
-  dragHandle: React.ReactNode
-}) {
-  const [renaming, setRenaming] = useState(false)
   const showCover = cat.balance < 0 && !cat.isCCPayment
 
   return (
     <>
-      {/* ── Mobile card (2-row layout) ── */}
-      <div className="sm:hidden border-b border-[#1f2039]">
-        {renaming ? (
-          <div className="flex items-center gap-2 px-4 py-2">
-            {dragHandle}
-            <InlineRename
-              value={cat.name}
-              onSave={(n) => { setRenaming(false); onSaveName(n) }}
-              onCancel={() => setRenaming(false)}
-              className="text-sm flex-1"
-            />
+      {/* ── Mobile card ── */}
+      <div className="sm:hidden border-b border-[#1f2039] px-4 py-2">
+        <span className="block text-sm text-[#ecf0f1] truncate mb-1">{cat.name}</span>
+        <div className="flex items-center gap-2 text-xs">
+          <span className="text-[10px] text-[#8a8fad] shrink-0">Assigned</span>
+          <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} className="w-20 text-right text-xs" />
+          <span className="text-[#3a3b58] shrink-0">·</span>
+          <span className="text-[10px] text-[#8a8fad] shrink-0">Spent</span>
+          <Amount value={cat.activity} className="text-xs" />
+          <div className="ml-auto flex items-center gap-1.5 shrink-0">
+            {showCover && <CoverButton categoryId={cat.id} month={month} budgeted={cat.budgeted} balance={cat.balance} rta={rta} />}
+            <Amount value={cat.balance} className="text-xs font-semibold" />
           </div>
-        ) : (
-          <>
-            {/* Row 1: name + rename/delete */}
-            <div className="flex items-center gap-2 px-4 pt-2.5 pb-1">
-              {dragHandle}
-              <span className="text-sm text-[#ecf0f1] flex-1 truncate min-w-0">
-                {cat.name}
-                {error && <span className="ml-2 text-xs text-[#ce6f8f]">{error}</span>}
-              </span>
-              <button onClick={() => setRenaming(true)} aria-label={`Rename ${cat.name}`} className="text-[#8a8fad] hover:text-[#b3a1e6] text-xs p-1.5 flex-shrink-0">✎</button>
-              <button onClick={onDelete} aria-label={`Delete ${cat.name}`} className="text-[#8a8fad] hover:text-[#ce6f8f] text-xs p-1.5 flex-shrink-0">✕</button>
-            </div>
-            {/* Row 2: budget numbers */}
-            <div className="flex items-center gap-2 px-4 pb-2.5 pl-9 text-xs">
-              <span className="text-[10px] text-[#8a8fad] shrink-0">Assigned</span>
-              <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} className="w-20 text-right text-xs" />
-              <span className="text-[#3a3b58] shrink-0">·</span>
-              <span className="text-[10px] text-[#8a8fad] shrink-0">Spent</span>
-              <Amount value={cat.activity} className="text-xs" />
-              <div className="ml-auto flex items-center gap-1.5 shrink-0">
-                {showCover && (
-                  <CoverButton
-                    categoryId={cat.id} month={month}
-                    budgeted={cat.budgeted} balance={cat.balance} rta={rta}
-                  />
-                )}
-                <Amount value={cat.balance} className="text-xs font-semibold" />
-              </div>
-            </div>
-          </>
-        )}
+        </div>
       </div>
 
       {/* ── Desktop grid ── */}
-      <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-3 sm:px-6 py-1.5
-                      border-b border-[#1f2039] hover:bg-[#1f2039] transition-colors items-center group/cat">
-        {dragHandle}
-        {renaming ? (
-          <InlineRename
-            value={cat.name}
-            onSave={(n) => { setRenaming(false); onSaveName(n) }}
-            onCancel={() => setRenaming(false)}
-            className="text-sm w-48"
-          />
-        ) : (
-          <span
-            onDoubleClick={() => setRenaming(true)}
-            title="Double-click to rename"
-            className="text-sm text-[#ecf0f1] cursor-default select-none truncate"
-          >
-            {cat.name}
-            {error && <span className="ml-2 text-xs text-[#ce6f8f]">{error}</span>}
-          </span>
-        )}
+      <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5
+                      border-b border-[#1f2039] hover:bg-[#1f2039] transition-colors items-center">
+        <span className="text-sm text-[#ecf0f1] truncate">{cat.name}</span>
         <div className="flex justify-end pr-2">
           <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} />
         </div>
         <Amount value={cat.activity} className="text-right text-sm pr-2" />
-        {/* Balance cell: Cover button (always visible when negative) + amount */}
         <div className="flex items-center justify-end gap-1.5">
-          {showCover && (
-            <CoverButton
-              categoryId={cat.id} month={month}
-              budgeted={cat.budgeted} balance={cat.balance} rta={rta}
-            />
-          )}
+          {showCover && <CoverButton categoryId={cat.id} month={month} budgeted={cat.budgeted} balance={cat.balance} rta={rta} />}
           <Amount value={cat.balance} className="text-sm font-medium" />
-        </div>
-        <div className="flex items-center justify-end gap-0.5 opacity-0 group-hover/cat:opacity-100 transition-opacity">
-          <button onClick={() => setRenaming(true)} title="Rename" aria-label={`Rename ${cat.name}`} className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1 py-0.5">✎</button>
-          <button onClick={onDelete} title="Delete" aria-label={`Delete ${cat.name}`} className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1 py-0.5">✕</button>
         </div>
       </div>
     </>
@@ -418,273 +180,80 @@ function CategoryItemRow({ cat, month, rta, error, onSaveName, onDelete, dragHan
 }
 
 // ---------------------------------------------------------------------------
-// Group section — dual mobile card / desktop grid header
+// Group section — display-only header
 // ---------------------------------------------------------------------------
-function GroupSection({ group, month, rta, dragHandle }: {
-  group: GroupRow; month: string; rta: number; dragHandle: React.ReactNode
+function GroupSection({ group, month, rta }: {
+  group: GroupRow; month: string; rta: number
 }) {
-  const [renaming, setRenaming] = useState(false)
-  const [, startTransition] = useTransition()
-  const [catErrors, setCatErrors] = useState<Record<string, string>>({})
-  const [groupError, setGroupError] = useState('')
-
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-  )
-
-  function handleDeleteGroup() {
-    setGroupError('')
-    startTransition(async () => {
-      try { await deleteCategoryGroup(group.id) }
-      catch (e) {
-        const msg = e instanceof Error ? e.message : 'Cannot delete'
-        setGroupError(msg)
-        setTimeout(() => setGroupError(''), 3000)
-      }
-    })
-  }
-
-  function handleDeleteCategory(id: string) {
-    setCatErrors((p) => ({ ...p, [id]: '' }))
-    startTransition(async () => {
-      try { await deleteCategory(id) }
-      catch (e) {
-        const msg = e instanceof Error ? e.message : 'Cannot delete'
-        setCatErrors((p) => ({ ...p, [id]: msg }))
-        setTimeout(() => setCatErrors((p) => ({ ...p, [id]: '' })), 3000)
-      }
-    })
-  }
-
-  function handleCatDragEnd(event: DragEndEvent) {
-    const { active, over } = event
-    if (!over || active.id === over.id) return
-    const ids = group.categories.map((c) => c.id)
-    const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
-    startTransition(() => reorderCategories(newOrder))
-  }
-
-  const nameEl = (mobile: boolean) =>
-    renaming ? (
-      <InlineRename
-        value={group.name}
-        onSave={(name) => { setRenaming(false); startTransition(() => renameCategoryGroup(group.id, name)) }}
-        onCancel={() => setRenaming(false)}
-        className={mobile ? 'text-xs font-bold flex-1' : 'text-xs font-bold w-48'}
-      />
-    ) : mobile ? (
-      <span className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider flex-1 truncate">
-        {group.name}
-        {groupError && <span className="ml-2 text-[#ce6f8f] normal-case font-normal tracking-normal">{groupError}</span>}
-      </span>
-    ) : (
-      <span
-        onDoubleClick={() => setRenaming(true)}
-        title="Double-click to rename"
-        className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider cursor-default select-none"
-      >
-        {group.name}
-        {groupError && <span className="ml-2 text-[#ce6f8f] normal-case font-normal tracking-normal">{groupError}</span>}
-      </span>
-    )
-
-  const actionBtns = (mobile: boolean) => (
-    <div className={`flex items-center gap-0.5 flex-shrink-0 ${mobile ? '' : 'opacity-0 group-hover/grp:opacity-100 transition-opacity'}`}>
-      <button onClick={() => setRenaming(true)} title="Rename group" aria-label={`Rename ${group.name}`} className="text-xs text-[#8a8fad] hover:text-[#b3a1e6] px-1 py-0.5">✎</button>
-      <button
-        onClick={handleDeleteGroup}
-        title={group.categories.length > 0 ? 'Remove all categories first' : 'Delete group'}
-        aria-label={`Delete ${group.name}`}
-        disabled={group.categories.length > 0}
-        className="text-xs text-[#8a8fad] hover:text-[#ce6f8f] px-1 py-0.5 disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:text-[#8a8fad]"
-      >✕</button>
-    </div>
-  )
-
   return (
     <div>
-      {/* ── Mobile group header ── */}
+      {/* ── Mobile header ── */}
       <div className="sm:hidden flex items-center gap-2 px-4 py-2 bg-[#252640] border-b border-t border-[#3a3b58]">
-        {dragHandle}
-        {nameEl(true)}
-        {!renaming && (
-          <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="text-[10px] text-[#8a8fad] tabular-nums">{formatMoney(group.totalBudgeted)}</span>
-            <Amount value={group.totalBalance} className="text-xs" />
-          </div>
-        )}
-        {actionBtns(true)}
+        <span className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider flex-1 truncate">{group.name}</span>
+        <span className="text-[10px] text-[#8a8fad] tabular-nums">{formatMoney(group.totalBudgeted)}</span>
+        <Amount value={group.totalBalance} className="text-xs" />
       </div>
 
-      {/* ── Desktop group header ── */}
-      <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-3 sm:px-6 py-2
-                      bg-[#252640] border-b border-t border-[#3a3b58] group/grp items-center">
-        {dragHandle}
-        {nameEl(false)}
+      {/* ── Desktop header ── */}
+      <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-2
+                      bg-[#252640] border-b border-t border-[#3a3b58] items-center">
+        <span className="text-xs font-bold text-[#8a8fad] uppercase tracking-wider">{group.name}</span>
         <span className="text-right text-xs text-[#8a8fad] tabular-nums pr-2">{formatMoney(group.totalBudgeted)}</span>
         <Amount value={group.totalActivity} className="text-right text-xs pr-2" />
         <Amount value={group.totalBalance} className="text-right text-xs font-semibold" />
-        {actionBtns(false)}
       </div>
 
-      {/* Category rows */}
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleCatDragEnd}>
-        <SortableContext items={group.categories.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {group.categories.map((cat) => (
-            <SortableCatItem key={cat.id} id={cat.id}>
-              {({ dragHandle: catHandle }) => (
-                <CategoryItemRow
-                  cat={cat}
-                  month={month}
-                  rta={rta}
-                  error={catErrors[cat.id] ?? ''}
-                  onSaveName={(name) => startTransition(() => renameCategory(cat.id, name))}
-                  onDelete={() => handleDeleteCategory(cat.id)}
-                  dragHandle={catHandle}
-                />
-              )}
-            </SortableCatItem>
-          ))}
-        </SortableContext>
-      </DndContext>
-
-      <AddCategoryRow groupId={group.id} />
+      {group.categories.map((cat) => (
+        <CategoryItemRow key={cat.id} cat={cat} month={month} rta={rta} />
+      ))}
     </div>
   )
 }
 
 // ---------------------------------------------------------------------------
-// Add group row
-// ---------------------------------------------------------------------------
-type GroupType = 'expense' | 'income'
-
-function AddGroupRow() {
-  const [open, setOpen] = useState(false)
-  const [name, setName] = useState('')
-  const [groupType, setGroupType] = useState<GroupType>('expense')
-  const [isPending, startTransition] = useTransition()
-  const ref = useRef<HTMLInputElement>(null)
-
-  useEffect(() => { if (open) ref.current?.focus() }, [open])
-
-  function commit() {
-    const trimmed = name.trim()
-    if (!trimmed) { setOpen(false); return }
-    startTransition(async () => {
-      await addCategoryGroup(trimmed, groupType === 'income')
-      setName(''); setGroupType('expense'); setOpen(false)
-    })
-  }
-
-  if (!open) {
-    return (
-      <button
-        onClick={() => setOpen(true)}
-        className="w-full text-left px-4 sm:px-6 py-3 text-sm text-[#8a8fad] hover:text-[#b3a1e6]
-                   hover:bg-[#1f2039] transition-colors border-t border-[#3a3b58] mt-2"
-      >
-        + Add Group
-      </button>
-    )
-  }
-
-  return (
-    <div className="px-4 sm:px-6 py-3 border-t border-[#3a3b58] mt-2 space-y-2">
-      <div className="flex rounded-lg bg-[#2a2b45] p-0.5 w-fit">
-        {(['expense', 'income'] as const).map((t) => (
-          <button
-            key={t} type="button"
-            onMouseDown={(e) => e.preventDefault()}
-            onClick={() => { setGroupType(t); ref.current?.focus() }}
-            className={`px-3 py-1 rounded-md text-xs font-medium transition-colors ${
-              groupType === t
-                ? t === 'income' ? 'bg-[#5ccc96] text-[#1a1b2e]' : 'bg-[#1f2039] text-[#ecf0f1] shadow'
-                : 'text-[#8a8fad] hover:text-[#ecf0f1]'
-            }`}
-          >
-            {t === 'income' ? 'Income' : 'Expense'}
-          </button>
-        ))}
-      </div>
-      <div className="flex items-center gap-2">
-        <input
-          ref={ref} value={name}
-          onChange={(e) => setName(e.target.value)}
-          onBlur={commit}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') commit()
-            if (e.key === 'Escape') { setOpen(false); setName(''); setGroupType('expense') }
-          }}
-          placeholder={groupType === 'income' ? 'e.g. Salary, Freelance…' : 'Group name…'}
-          disabled={isPending}
-          className="flex-1 bg-[#2a2b45] border border-[#b3a1e6] text-[#ecf0f1] text-sm rounded
-                     px-2 py-1 focus:outline-none focus:ring-1 focus:ring-[#b3a1e6] disabled:opacity-50"
-        />
-        <button
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => { setOpen(false); setName(''); setGroupType('expense') }}
-          className="text-xs text-[#8a8fad] hover:text-[#ecf0f1] px-1"
-        >✕</button>
-      </div>
-    </div>
-  )
-}
-
-// ---------------------------------------------------------------------------
-// Main table
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// Mini bank card SVG icon
+// Mini bank card icon
 // ---------------------------------------------------------------------------
 function BankCard({ name }: { name: string }) {
   const { color, abbrev } = getBankBrand(name)
   return (
     <svg width="24" height="16" viewBox="0 0 24 16" fill="none" aria-hidden className="flex-shrink-0">
       <rect x="0.5" y="0.5" width="23" height="15" rx="2" fill={color} fillOpacity="0.15" stroke={color} strokeOpacity="0.7" />
-      {/* stripe */}
       <rect x="0" y="3.5" width="24" height="2.5" fill={color} fillOpacity="0.4" />
-      {/* abbreviation */}
       <text x="12" y="13" textAnchor="middle" fill={color} fontSize="5.5" fontWeight="700" fontFamily="monospace" opacity="0.9">{abbrev}</text>
     </svg>
   )
 }
 
 // ---------------------------------------------------------------------------
-// CC Payment group — read-only, system-managed section
+// CC Payment section — read-only, system-managed
 // ---------------------------------------------------------------------------
 function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
   if (groups.length === 0) return null
   return (
     <>
-      <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-6 py-1.5
+      <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5
                       bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
-        <span /><span>💳 Credit Card Payments</span>
+        <span>💳 Credit Card Payments</span>
         <span className="text-right pr-2" title="CC spending this month — auto-set-aside for payment">Spent</span>
         <span className="text-right pr-2">Payments</span>
         <span className="text-right">Card Balance</span>
-        <span />
       </div>
       {groups.flatMap((g) =>
         g.categories.map((cat) => (
           <div key={cat.id}>
-            {/* Mobile */}
             <div className="sm:hidden flex items-center gap-2 px-4 py-2.5 border-b border-[#1f2039]">
               <BankCard name={cat.name} />
               <span className="text-sm text-[#ecf0f1] flex-1 truncate">{cat.name}</span>
               <Amount value={cat.balance} className="text-sm flex-shrink-0" />
             </div>
-            {/* Desktop */}
-            <div className="hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-3 sm:px-6 py-1.5
-                            border-b border-[#1f2039] items-center">
-              <BankCard name={cat.name} />
-              <span className="text-sm text-[#ecf0f1] truncate" title="Auto-managed — funded by CC spending">{cat.name}</span>
-              <span className="text-right text-sm text-[#42b3c2] tabular-nums pr-2" title="Auto-funded from CC spending this month">
-                {formatMoney(cat.budgeted)}
-              </span>
+            <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5 border-b border-[#1f2039] items-center">
+              <div className="flex items-center gap-2">
+                <BankCard name={cat.name} />
+                <span className="text-sm text-[#ecf0f1] truncate" title="Auto-managed — funded by CC spending">{cat.name}</span>
+              </div>
+              <span className="text-right text-sm text-[#42b3c2] tabular-nums pr-2">{formatMoney(cat.budgeted)}</span>
               <Amount value={cat.activity} className="text-right text-sm pr-2" />
               <Amount value={cat.balance} className="text-right text-sm font-medium" />
-              <span />
             </div>
           </div>
         ))
@@ -693,62 +262,34 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
   )
 }
 
+// ---------------------------------------------------------------------------
+// Main table — budget-only, no management
+// ---------------------------------------------------------------------------
 export function BudgetTable({ month, groups, rta }: { month: string; groups: GroupRow[]; rta: number }) {
-  const [, startTransition] = useTransition()
   const incomeGroups  = groups.filter((g) => g.isIncome && !g.isSystem && !g.isTransfer)
   const expenseGroups = groups.filter((g) => !g.isIncome && !g.isSystem && !g.isTransfer)
   const ccGroups      = groups.filter((g) => g.isSystem)
 
-  const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
-    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
-  )
-
-  function makeDragEnd(section: GroupRow[]) {
-    return (event: DragEndEvent) => {
-      const { active, over } = event
-      if (!over || active.id === over.id) return
-      const ids = section.map((g) => g.id)
-      const newOrder = arrayMove(ids, ids.indexOf(active.id as string), ids.indexOf(over.id as string))
-      startTransition(() => reorderGroups(newOrder))
-    }
-  }
-
-  function renderSection(sectionGroups: GroupRow[]) {
-    return (
-      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={makeDragEnd(sectionGroups)}>
-        <SortableContext items={sectionGroups.map((g) => g.id)} strategy={verticalListSortingStrategy}>
-          {sectionGroups.map((group) => (
-            <SortableGroupItem key={group.id} id={group.id}>
-              {({ dragHandle }) => <GroupSection group={group} month={month} rta={rta} dragHandle={dragHandle} />}
-            </SortableGroupItem>
-          ))}
-        </SortableContext>
-      </DndContext>
-    )
-  }
-
   function sectionLabel(label: string, color: string, cols: [string, string, string]) {
     return (
-      <div className={`hidden sm:grid grid-cols-[1.5rem_1fr_7rem_7rem_7rem_2.5rem] px-6 py-1.5
+      <div className={`hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5
                        bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold ${color} uppercase tracking-widest`}>
-        <span /><span>{label}</span>
+        <span>{label}</span>
         <span className="text-right pr-2">{cols[0]}</span>
         <span className="text-right pr-2">{cols[1]}</span>
         <span className="text-right">{cols[2]}</span>
-        <span />
       </div>
     )
   }
 
   return (
     <div className="flex-1 sm:overflow-x-auto">
-      <div className="sm:min-w-[33rem]">
+      <div className="sm:min-w-[30rem]">
         {/* Income */}
         {incomeGroups.length > 0 && (
           <>
             {sectionLabel('💰 Income', 'text-[#5ccc96]', ['Expected', 'Received', 'vs Expected'])}
-            {renderSection(incomeGroups)}
+            {incomeGroups.map((g) => <GroupSection key={g.id} group={g} month={month} rta={rta} />)}
           </>
         )}
 
@@ -756,20 +297,28 @@ export function BudgetTable({ month, groups, rta }: { month: string; groups: Gro
         {expenseGroups.length === 0 && incomeGroups.length === 0 && (
           <div className="px-6 py-12 text-center text-[#8a8fad] text-sm">
             No categories yet.{' '}
-            <span className="text-[#b3a1e6]">Use &ldquo;+ Add Group&rdquo; below to get started.</span>
+            <Link href="/settings/categories" className="text-[#b3a1e6] hover:underline">
+              Add groups and categories →
+            </Link>
           </div>
         )}
         {expenseGroups.length > 0 && (
           <>
             {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Assigned', 'Spent', 'Balance'])}
-            {renderSection(expenseGroups)}
+            {expenseGroups.map((g) => <GroupSection key={g.id} group={g} month={month} rta={rta} />)}
           </>
         )}
 
-        {/* Credit Card Payments — system-managed, read-only */}
         <CCPaymentSection groups={ccGroups} />
 
-        <AddGroupRow />
+        <div className="px-6 py-3 border-t border-[#3a3b58] mt-2">
+          <Link
+            href="/settings/categories"
+            className="text-xs text-[#5a5b78] hover:text-[#b3a1e6] transition-colors"
+          >
+            ⚙ Manage groups &amp; categories
+          </Link>
+        </div>
       </div>
     </div>
   )
