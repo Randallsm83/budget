@@ -4,6 +4,7 @@ import { db } from '@/db'
 import { accounts, transactions, monthBudgets, categories, categoryGroups } from '@/db/schema'
 import { and, eq, gte, lt, inArray } from 'drizzle-orm'
 import { firstDayOfNextMonth } from '@/lib/budget'
+import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -16,6 +17,7 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
   }
 
+  try {
   const monthStart = `${month}-01`
   const monthEnd = firstDayOfNextMonth(month)
 
@@ -116,4 +118,8 @@ export async function POST(req: NextRequest) {
     categories: rows,
     pace: { daysElapsed, daysInMonth, pacePercent: parseFloat((pacePct * 100).toFixed(1)) },
   })
+  } catch (e) {
+    appLog('error', '/api/ai/forecast', e instanceof Error ? e.message : 'Forecast failed', { userId, metadata: { month } })
+    return NextResponse.json({ error: e instanceof Error ? e.message : 'Forecast failed' }, { status: 500 })
+  }
 }

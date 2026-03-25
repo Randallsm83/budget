@@ -7,6 +7,7 @@ import { generateText } from '@/lib/ai/provider'
 import { debtPlanPrompt, systemPrompt } from '@/lib/ai/prompts'
 import { safeJsonParse } from '@/lib/ai/guards'
 import { DebtPlanSchema } from '@/lib/ai/types'
+import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -55,7 +56,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ plan: parsed.data })
   } catch (e) {
-    console.error('[ai/debt-plan]', e)
+    appLog('error', '/api/ai/debt-plan', e instanceof Error ? e.message : 'AI debt plan failed', { userId, metadata: { month, method } })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'AI debt plan failed' }, { status: 500 })
   }
 }
