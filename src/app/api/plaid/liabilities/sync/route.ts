@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
   } catch (err: unknown) {
     const errFields = extractPlaidError(err)
     plaidLog('error', { route: 'plaid/liabilities/sync', userId: session.user.id, ...errFields })
-    const CONSENT_CODES = new Set(['PRODUCT_NOT_READY', 'PRODUCTS_NOT_READY', 'PRODUCT_NOT_ENABLED'])
+    const CONSENT_CODES = new Set(['PRODUCT_NOT_READY', 'PRODUCTS_NOT_READY', 'PRODUCT_NOT_ENABLED', 'ADDITIONAL_CONSENT_REQUIRED'])
     if (errFields.errorCode && CONSENT_CODES.has(errFields.errorCode)) {
       return NextResponse.json({ error: 'This account needs additional consent to access liability data. Re-link the account to grant access.', requiresConsent: true }, { status: 403 })
     }
