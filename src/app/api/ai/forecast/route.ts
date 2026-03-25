@@ -95,12 +95,13 @@ export async function POST(req: NextRequest) {
     .map((c) => {
       const budgetedMu = budgetMap.get(c.id) ?? 0
       const spentMu = spentMap[c.id] ?? 0
-      // Only extrapolate when spending is below budget. If spend >= budget,
-      // the charge is likely a fixed one-time payment (rent, mortgage, subscription)
-      // — don't project it higher just because it was paid early in the month.
-      const projectedMu = pacePct > 0 && spentMu < budgetedMu
-        ? Math.round(spentMu / pacePct)
-        : spentMu
+      // Extrapolate ongoing spending, but not one-time charges.
+      // If spending is already > pace + 15 percentage points ahead of schedule,
+      // the category was likely paid in one shot (rent, mortgage, subscriptions).
+      // Projecting it higher would produce false over-budget warnings.
+      const pctUsed = budgetedMu > 0 ? spentMu / budgetedMu : 0
+      const shouldExtrapolate = pacePct > 0 && spentMu < budgetedMu && pctUsed < pacePct + 0.15
+      const projectedMu = shouldExtrapolate ? Math.round(spentMu / pacePct) : spentMu
       const overspendMu = projectedMu - budgetedMu
       return {
         categoryId: c.id,
