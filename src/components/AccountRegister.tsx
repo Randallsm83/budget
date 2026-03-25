@@ -79,6 +79,7 @@ function HoldingsPanel({
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
   const [requiresConsent, setRequiresConsent] = useState(false)
+  const [relinked, setRelinked] = useState(false) // true after a re-link attempt
 
   async function handleSync() {
     setSyncing(true)
@@ -91,6 +92,7 @@ function HoldingsPanel({
     const data = await res.json()
     setSyncing(false)
     if (res.ok) {
+      setRelinked(false)
       onSynced(`Synced ${data.synced} holding${data.synced !== 1 ? 's' : ''}`)
       router.refresh()
     } else if (data.requiresConsent) {
@@ -102,28 +104,46 @@ function HoldingsPanel({
 
   if (!connection && holdings.length === 0) return null
 
+  // What to show in the header action area
+  let headerAction: React.ReactNode = null
+  if (connection) {
+    if (requiresConsent && !relinked) {
+      // First consent error: offer to re-link. Don't auto-retry after — let user confirm.
+      headerAction = (
+        <>
+          <span className="text-xs text-[#e39400]">Needs consent —</span>
+          <PlaidRelink
+            accountId={accountId}
+            onRelinkComplete={() => { setRequiresConsent(false); setRelinked(true) }}
+          />
+        </>
+      )
+    } else if (requiresConsent && relinked) {
+      // Already re-linked and still getting consent error — institution doesn’t support this
+      headerAction = (
+        <span className="text-xs text-[#8a8fad]">
+          Not supported by this institution
+        </span>
+      )
+    } else {
+      headerAction = (
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                     text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {syncing ? 'Syncing…' : relinked ? '↻ Sync now' : '↻ Sync Holdings'}
+        </button>
+      )
+    }
+  }
+
   return (
     <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
       <div className="px-4 sm:px-6 py-2 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">Holdings</span>
-        <div className="flex items-center gap-2">
-          {requiresConsent && connection && (
-            <>
-              <span className="text-xs text-[#e39400]">Needs consent —</span>
-              <PlaidRelink accountId={accountId} onRelinkComplete={() => { setRequiresConsent(false); handleSync() }} />
-            </>
-          )}
-          {connection && !requiresConsent && (
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
-                         text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {syncing ? 'Syncing…' : '↻ Sync Holdings'}
-            </button>
-          )}
-        </div>
+        <div className="flex items-center gap-2">{headerAction}</div>
       </div>
       {holdings.length > 0 ? (
         <div className="overflow-x-auto">
@@ -170,7 +190,11 @@ function HoldingsPanel({
         </div>
       ) : (
         <p className="px-4 sm:px-6 pb-3 text-xs text-[#8a8fad]">
-          No holdings data yet.{connection ? ' Click \u201c\u21bb Sync Holdings\u201d to load.' : ''}
+          {requiresConsent && relinked
+            ? 'This institution does not provide holding data via Plaid.'
+            : connection
+              ? 'No holdings yet. Click \u201c\u21bb Sync Holdings\u201d to load.'
+              : 'No holdings data.'}
         </p>
       )}
     </div>
@@ -191,6 +215,7 @@ function LiabilityPanel({
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
   const [requiresConsent, setRequiresConsent] = useState(false)
+  const [relinked, setRelinked] = useState(false)
 
   async function handleSync() {
     setSyncing(true)
@@ -203,10 +228,11 @@ function LiabilityPanel({
     const data = await res.json()
     setSyncing(false)
     if (res.ok && data.synced) {
+      setRelinked(false)
       onSynced('Liability details synced')
       router.refresh()
     } else if (res.ok) {
-      onSynced('No liability data found for this account')
+      onSynced('No data returned — this institution may not provide liability details via Plaid')
     } else if (data.requiresConsent) {
       setRequiresConsent(true)
     } else {
@@ -262,28 +288,41 @@ function LiabilityPanel({
     : type === 'mortgage' ? 'Mortgage Details'
     : 'Liability Details'
 
+  let liabilityHeaderAction: React.ReactNode = null
+  if (connection) {
+    if (requiresConsent && !relinked) {
+      liabilityHeaderAction = (
+        <>
+          <span className="text-xs text-[#e39400]">Needs consent —</span>
+          <PlaidRelink
+            accountId={accountId}
+            onRelinkComplete={() => { setRequiresConsent(false); setRelinked(true) }}
+          />
+        </>
+      )
+    } else if (requiresConsent && relinked) {
+      liabilityHeaderAction = (
+        <span className="text-xs text-[#8a8fad]">Not supported by this institution</span>
+      )
+    } else {
+      liabilityHeaderAction = (
+        <button
+          onClick={handleSync}
+          disabled={syncing}
+          className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                     text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+        >
+          {syncing ? 'Syncing…' : relinked ? '↻ Sync now' : '↻ Sync Details'}
+        </button>
+      )
+    }
+  }
+
   return (
     <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
       <div className="px-4 sm:px-6 py-2 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">{panelLabel}</span>
-        <div className="flex items-center gap-2">
-          {requiresConsent && connection && (
-            <>
-              <span className="text-xs text-[#e39400]">Needs consent —</span>
-              <PlaidRelink accountId={accountId} onRelinkComplete={() => { setRequiresConsent(false); handleSync() }} />
-            </>
-          )}
-          {connection && !requiresConsent && (
-            <button
-              onClick={handleSync}
-              disabled={syncing}
-              className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
-                         text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
-            >
-              {syncing ? 'Syncing…' : '↻ Sync Details'}
-            </button>
-          )}
-        </div>
+        <div className="flex items-center gap-2">{liabilityHeaderAction}</div>
       </div>
       {validFields.length > 0 ? (
         <div className="px-4 sm:px-6 pb-3 flex flex-wrap gap-x-6 gap-y-2">
@@ -301,7 +340,9 @@ function LiabilityPanel({
         </div>
       ) : (
         <p className="px-4 sm:px-6 pb-3 text-xs text-[#8a8fad]">
-          No liability details yet.{connection ? ' Click \u201c\u21bb Sync Details\u201d to load.' : ''}
+          {requiresConsent && relinked
+            ? 'This institution does not provide liability details via Plaid.'
+            : 'No details yet — click Sync Details to load. Not all institutions share this data.'}
         </p>
       )}
     </div>
