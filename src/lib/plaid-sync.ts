@@ -8,19 +8,22 @@ import { normalizePayee } from '@/lib/payee'
 import { getPlaidCategoryHints } from '@/lib/plaidCategories'
 import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
-// Payee patterns that indicate a bank transfer or CC bill payment.
-// Matches anywhere in the string (word boundary) to catch bank-prefixed names
-// like "Chase Online Transfer" or "BofA AutoPay".
-// Exported so the retroactive fix action in actions.ts can reuse the same logic.
-export const TRANSFER_RE = /\b(online transfer|ach transfer|wire transfer|book transfer|autopay|auto[- ]pay|online payment|internet payment|mobile payment|electronic payment|bill pay(?:ment)?|payment thank you|payment received|payment - thank you|credit card payment|direct debit)\b|^transfer (from|to|between)/i
+// Patterns that indicate a true bank-to-bank inter-account transfer.
+// IMPORTANT: Do NOT add CC bill payment patterns here (autopay, bill pay,
+// online payment, etc.). Those are checking outflows that must be categorised
+// to the CC Payment category so they appear in budget activity.
+// Only patterns that unambiguously mean "money moved between bank accounts"
+// belong here.
+// Exported so actions.ts reapplyTransferDetection can use the same logic.
+export const TRANSFER_RE = /\b(online transfer|ach transfer|wire transfer|book transfer)\b|^transfer (from|to|between)/i
 
 // Plaid personal_finance_category.detailed codes that unambiguously indicate
-// a transfer or CC bill payment rather than a categorizable expense.
-// Exported for retroactive use in actions.ts.
+// a bank-to-bank transfer. LOAN_PAYMENTS_CREDIT_CARD_PAYMENT is intentionally
+// excluded — those are CC bill payments from checking and must be categorised
+// to the CC Payment category, not hidden as transfers.
 export const TRANSFER_PFC_CODES = new Set([
   'TRANSFER_IN_ACCOUNT_TRANSFER',
   'TRANSFER_OUT_ACCOUNT_TRANSFER',
-  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
 ])
 
 type SyncConnection = typeof importConnections.$inferSelect

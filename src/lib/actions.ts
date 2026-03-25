@@ -345,6 +345,49 @@ export async function updateTransactionCategory(id: string, categoryId: string |
   revalidatePath(`/accounts/${txn.accountId}`)
 }
 
+// Patterns that were incorrectly added to TRANSFER_RE in a prior commit.
+// CC bill payments (autopay, bill payment, online payment, etc.) should be
+// categorized to the CC Payment category — NOT marked as isTransfer.
+const CC_PAYMENT_RE = /\b(autopay|auto[- ]pay|online payment|internet payment|mobile payment|electronic payment|bill pay(?:ment)?|payment thank you|payment received|payment - thank you|credit card payment|direct debit)\b/i
+
+/**
+ * Un-marks imported transactions that were incorrectly flagged as isTransfer
+ * due to CC bill payment patterns (autopay, bill payment, etc.).
+ * These should be categorised to the CC Payment category instead.
+ */
+export async function revertIncorrectTransfers(accountId: string): Promise<{ reverted: number }> {
+  const userId = await requireUser()
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, accountId), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  // Find imported transactions currently marked as transfers that match CC payment patterns
+  const rows = await db
+    .select({ id: transactions.id, payee: transactions.payee })
+    .from(transactions)
+    .where(and(
+      eq(transactions.accountId, accountId),
+      eq(transactions.userId, userId),
+      eq(transactions.isTransfer, true),
+      isNotNull(transactions.importId),
+    ))
+
+  const toRevert = rows.filter((t) => t.payee && CC_PAYMENT_RE.test(t.payee))
+  if (toRevert.length === 0) return { reverted: 0 }
+
+  const ids = toRevert.map((t) => t.id)
+  await db
+    .update(transactions)
+    .set({ isTransfer: false, updatedAt: new Date() })
+    .where(inArray(transactions.id, ids))
+
+  revalidatePath(`/accounts/${accountId}`)
+  revalidatePath('/budget')
+  return { reverted: toRevert.length }
+}
+
 /**
  * Re-scans all imported transactions for an account and marks any that match
  * the current transfer detection rules as isTransfer=true (clearing category).
