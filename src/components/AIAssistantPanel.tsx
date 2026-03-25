@@ -96,12 +96,12 @@ export function AIAssistantPanel({ month, pendingMessage, onPendingMessageConsum
   }
 
   return (
-    <div className="border border-[#3a3b58] rounded-lg bg-[#1f2039] p-3 sm:p-4">
-      <div className="flex items-center justify-between mb-2">
+    <div className="border border-[#3a3b58] rounded-lg bg-[#1f2039] p-3 sm:p-4 h-full flex flex-col">
+      <div className="flex items-center justify-between mb-2 flex-shrink-0">
         <h3 className="text-xs sm:text-sm font-semibold text-[#b3a1e6] uppercase tracking-wider">Budget Coach</h3>
         <span className="text-[10px] text-[#8a8fad]">{month}</span>
       </div>
-      <div className="max-h-48 overflow-auto space-y-2 mb-3">
+      <div className="flex-1 overflow-auto space-y-2 mb-3 min-h-0">
         {messages.length === 0 && (
           <p className="text-xs text-[#8a8fad]">Ask: “Why is my RTA this amount?”, “What should I fund first?”, or “How can I reduce debt faster?”</p>
         )}
