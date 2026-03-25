@@ -182,9 +182,11 @@ export async function buildMonthlyContext(userId: string, month: string) {
       const activityMu = activityByCat[c.id] ?? 0 // negative = spending
       const spentMu = Math.abs(Math.min(0, activityMu))
       const hist = historicalAverages[c.id]
-      const projectedSpentDollars = pacePct > 0
+      // Cap projection at actual spend when already at/over budget
+      // to avoid falsely flagging fixed monthly charges (rent, mortgage, etc.)
+      const projectedSpentDollars = pacePct > 0 && spentMu < budgetedMu
         ? parseFloat((toDollars(spentMu) / pacePct).toFixed(2))
-        : null
+        : toDollars(spentMu)
       return {
         name: c.name,
         groupName: c.groupName ?? 'Uncategorized',
