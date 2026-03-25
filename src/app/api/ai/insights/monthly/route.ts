@@ -7,6 +7,7 @@ import { generateText } from '@/lib/ai/provider'
 import { insightsPrompt, systemPrompt } from '@/lib/ai/prompts'
 import { safeJsonParse } from '@/lib/ai/guards'
 import { InsightSchema } from '@/lib/ai/types'
+import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -49,7 +50,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ insights })
   } catch (e) {
-    console.error('[ai/insights]', e)
+    appLog('error', '/api/ai/insights/monthly', e instanceof Error ? e.message : 'AI insights failed', { userId, metadata: { month } })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'AI insights failed' }, { status: 500 })
   }
 }

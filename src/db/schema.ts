@@ -271,6 +271,22 @@ export const aiAuditEvents = pgTable('ai_audit_events', {
   safetyFlags: jsonb('safety_flags'),
   createdAt: timestamp('created_at').notNull().defaultNow(),
 })
+
+// ---------------------------------------------------------------------------
+// App logs — persistent error/warning log for debugging
+// userId is nullable so system-level errors (webhooks, background tasks)
+// can be logged without a user context.
+// ---------------------------------------------------------------------------
+export const appLogs = pgTable('app_logs', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  userId: uuid('user_id').references(() => users.id, { onDelete: 'cascade' }),
+  level: text('level').notNull(), // 'info' | 'warn' | 'error'
+  route: text('route').notNull(),
+  message: text('message').notNull(),
+  metadata: jsonb('metadata'),
+  createdAt: timestamp('created_at').notNull().defaultNow(),
+})
+
 // ---------------------------------------------------------------------------
 // Relations
 // ---------------------------------------------------------------------------
@@ -288,6 +304,7 @@ export const usersRelations = relations(users, ({ many }) => ({
   aiMessages: many(aiMessages),
   aiRecommendations: many(aiRecommendations),
   aiAuditEvents: many(aiAuditEvents),
+  appLogs: many(appLogs),
 }))
 
 export const accountsRelations = relations(accounts, ({ one, many }) => ({
@@ -377,4 +394,8 @@ export const aiRecommendationsRelations = relations(aiRecommendations, ({ one })
 
 export const aiAuditEventsRelations = relations(aiAuditEvents, ({ one }) => ({
   user: one(users, { fields: [aiAuditEvents.userId], references: [users.id] }),
+}))
+
+export const appLogsRelations = relations(appLogs, ({ one }) => ({
+  user: one(users, { fields: [appLogs.userId], references: [users.id] }),
 }))

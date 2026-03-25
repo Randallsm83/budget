@@ -41,6 +41,23 @@ export function plaidLog(level: 'info' | 'warn' | 'error', entry: PlaidLogEntry)
   if (level === 'error') console.error('[plaid]', output)
   else if (level === 'warn')  console.warn('[plaid]', output)
   else                         console.log('[plaid]', output)
+
+  // Persist errors and warnings to app_logs for long-term debugging
+  if (level === 'error' || level === 'warn') {
+    // Dynamic import avoids circular deps; fire-and-forget
+    import('@/lib/logger').then(({ appLog }) => {
+      appLog(level, `plaid/${entry.route}`, entry.errorMessage ?? entry.errorCode ?? 'Plaid error', {
+        userId: entry.userId,
+        metadata: {
+          errorCode:    entry.errorCode,
+          errorType:    entry.errorType,
+          requestId:    entry.requestId,
+          plaidItemId:  entry.plaidItemId,
+          plaidAccountId: entry.plaidAccountId,
+        },
+      })
+    }).catch(() => { /* never block */ })
+  }
 }
 
 /**

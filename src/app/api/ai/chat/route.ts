@@ -6,6 +6,7 @@ import { buildMonthlyContext } from '@/lib/ai/context'
 import { generateText } from '@/lib/ai/provider'
 import { chatPrompt, systemPrompt } from '@/lib/ai/prompts'
 import { ChatMessageSchema } from '@/lib/ai/types'
+import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
   const session = await auth()
@@ -62,7 +63,7 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ conversationId, message: finalText })
   } catch (e) {
-    console.error('[ai/chat]', e)
+    appLog('error', '/api/ai/chat', e instanceof Error ? e.message : 'AI chat failed', { userId, metadata: { month } })
     return NextResponse.json({ error: e instanceof Error ? e.message : 'AI chat failed' }, { status: 500 })
   }
 }
