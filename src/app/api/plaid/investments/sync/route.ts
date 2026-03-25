@@ -30,7 +30,12 @@ export async function POST(req: NextRequest) {
     plaidLog('info', { route: 'plaid/investments/sync', userId, accountId, plaidItemId: connection.plaidItemId ?? undefined, plaidAccountId: connection.plaidAccountId, synced: result.synced })
     return NextResponse.json(result)
   } catch (err: unknown) {
-    plaidLog('error', { route: 'plaid/investments/sync', userId: session.user.id, ...extractPlaidError(err) })
+    const errFields = extractPlaidError(err)
+    plaidLog('error', { route: 'plaid/investments/sync', userId: session.user.id, ...errFields })
+    const CONSENT_CODES = new Set(['PRODUCT_NOT_READY', 'PRODUCTS_NOT_READY', 'PRODUCT_NOT_ENABLED'])
+    if (errFields.errorCode && CONSENT_CODES.has(errFields.errorCode)) {
+      return NextResponse.json({ error: 'This account needs additional consent to access investment data. Re-link the account to grant access.', requiresConsent: true }, { status: 403 })
+    }
     const data = (err as { response?: { data?: unknown } })?.response?.data
     return NextResponse.json({ error: data ? JSON.stringify(data) : (err instanceof Error ? err.message : 'Unknown error') }, { status: 500 })
   }

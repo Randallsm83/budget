@@ -2,6 +2,7 @@
 
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
+import { useAdminMode } from '@/lib/admin-mode'
 import { AddTransactionModal } from './AddTransactionModal'
 import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
@@ -77,9 +78,11 @@ function HoldingsPanel({
 }) {
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
+  const [requiresConsent, setRequiresConsent] = useState(false)
 
   async function handleSync() {
     setSyncing(true)
+    setRequiresConsent(false)
     const res = await fetch('/api/plaid/investments/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -90,6 +93,8 @@ function HoldingsPanel({
     if (res.ok) {
       onSynced(`Synced ${data.synced} holding${data.synced !== 1 ? 's' : ''}`)
       router.refresh()
+    } else if (data.requiresConsent) {
+      setRequiresConsent(true)
     } else {
       onSynced(`Holdings sync failed: ${data.error ?? 'unknown error'}`)
     }
@@ -99,18 +104,26 @@ function HoldingsPanel({
 
   return (
     <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
-      <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
+      <div className="px-4 sm:px-6 py-2 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">Holdings</span>
-        {connection && (
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
-                       text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
-          >
-            {syncing ? 'Syncing…' : '↻ Sync Holdings'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {requiresConsent && connection && (
+            <>
+              <span className="text-xs text-[#e39400]">Needs consent —</span>
+              <PlaidRelink accountId={accountId} onRelinkComplete={() => { setRequiresConsent(false); handleSync() }} />
+            </>
+          )}
+          {connection && !requiresConsent && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                         text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {syncing ? 'Syncing…' : '↻ Sync Holdings'}
+            </button>
+          )}
+        </div>
       </div>
       {holdings.length > 0 ? (
         <div className="overflow-x-auto">
@@ -177,9 +190,11 @@ function LiabilityPanel({
 }) {
   const router = useRouter()
   const [syncing, setSyncing] = useState(false)
+  const [requiresConsent, setRequiresConsent] = useState(false)
 
   async function handleSync() {
     setSyncing(true)
+    setRequiresConsent(false)
     const res = await fetch('/api/plaid/liabilities/sync', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -192,6 +207,8 @@ function LiabilityPanel({
       router.refresh()
     } else if (res.ok) {
       onSynced('No liability data found for this account')
+    } else if (data.requiresConsent) {
+      setRequiresConsent(true)
     } else {
       onSynced(`Details sync failed: ${data.error ?? 'unknown error'}`)
     }
@@ -247,18 +264,26 @@ function LiabilityPanel({
 
   return (
     <div className="flex-shrink-0 border-b border-[#3a3b58] bg-[#1a1b2e]">
-      <div className="px-4 sm:px-6 py-2 flex items-center justify-between">
+      <div className="px-4 sm:px-6 py-2 flex items-center justify-between gap-2">
         <span className="text-xs font-semibold text-[#8a8fad] uppercase tracking-wider">{panelLabel}</span>
-        {connection && (
-          <button
-            onClick={handleSync}
-            disabled={syncing}
-            className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
-                       text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
-          >
-            {syncing ? 'Syncing…' : '↻ Sync Details'}
-          </button>
-        )}
+        <div className="flex items-center gap-2">
+          {requiresConsent && connection && (
+            <>
+              <span className="text-xs text-[#e39400]">Needs consent —</span>
+              <PlaidRelink accountId={accountId} onRelinkComplete={() => { setRequiresConsent(false); handleSync() }} />
+            </>
+          )}
+          {connection && !requiresConsent && (
+            <button
+              onClick={handleSync}
+              disabled={syncing}
+              className="border border-[#3a3b58] hover:border-[#5ccc96] text-[#8a8fad] hover:text-[#5ccc96]
+                         text-xs px-2.5 py-1 rounded-lg transition-colors disabled:opacity-50"
+            >
+              {syncing ? 'Syncing…' : '↻ Sync Details'}
+            </button>
+          )}
+        </div>
       </div>
       {validFields.length > 0 ? (
         <div className="px-4 sm:px-6 pb-3 flex flex-wrap gap-x-6 gap-y-2">
@@ -592,7 +617,6 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [accountName, setAccountName] = useState(account.name)
   const [showUpdateBalance, setShowUpdateBalance] = useState(false)
   const [syncing, setSyncing] = useState(false)
-  const [loadingHistory, setLoadingHistory] = useState(false)
   const [syncResult, setSyncResult] = useState<string | null>(null)
   const [applyingRules, setApplyingRules] = useState(false)
   const [enriching, setEnriching] = useState(false)
@@ -601,6 +625,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
   const [disconnecting, setDisconnecting] = useState(false)
   const [repairing, setRepairing] = useState(false)
   const [showSecondary, setShowSecondary] = useState(false)
+  const [adminMode] = useAdminMode()
 
   const uncategorizedCount = isTracking ? 0 : txns.filter(
     (t) => !t.categoryId && !t.isTransfer && t.amount < 0
@@ -651,25 +676,6 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     } finally {
       setApplyingRules(false)
     }
-  }
-
-  async function handleLoadHistory() {
-    setLoadingHistory(true)
-    setSyncResult(null)
-    const res = await fetch('/api/plaid/refresh', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ accountId: account.id }),
-    })
-    setLoadingHistory(false)
-    if (!res.ok) {
-      const data = await res.json()
-      setSyncResult(`History request failed: ${data.error ?? 'unknown error'}`)
-      return
-    }
-    // Plaid loads history asynchronously in the background.
-    // The webhook (SYNC_UPDATES_AVAILABLE) will auto-sync transactions as they arrive.
-    setSyncResult('History requested — transactions will appear automatically as Plaid loads them (usually a few minutes)')
   }
 
   async function handleSync() {
@@ -833,7 +839,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 {showSecondary ? '×' : '⋯'}
               </button>
             )}
-            {!isTracking && (
+            {!isTracking && adminMode && (
               <button
                 className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#ce6f8f]/60 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f]
                            font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
@@ -844,7 +850,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 {repairing ? 'Clearing…' : '✗ Clear transactions'}
               </button>
             )}
-            {!isTracking && connection && (
+            {!isTracking && connection && adminMode && (
               <button
                 className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#ce6f8f]/60 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f]
                            font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
@@ -855,15 +861,15 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 {repairing ? 'Repairing…' : '⚠ Repair'}
               </button>
             )}
-            {!isTracking && (
+            {!isTracking && adminMode && (
               <button
                 className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
                            font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
                 onClick={handleEnrich}
                 disabled={enriching}
-                title="Clean up merchant names and auto-categorize using Plaid Enrich"
+                title="Rewrites payee names via Plaid Enrich and auto-categorizes uncategorized transactions. Updates payee rules."
               >
-                {enriching ? 'Cleaning up…' : '✨ Clean up'}
+                {enriching ? 'Enriching…' : '✨ Enrich payees'}
               </button>
             )}
             {!isTracking && (
@@ -875,18 +881,6 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 title="Re-categorize uncategorized transactions using saved payee rules"
               >
                 {applyingRules ? 'Applying…' : '★ Rules'}
-              </button>
-            )}
-            {!isTracking && connection && (
-              <button
-                onClick={handleLoadHistory}
-                disabled={loadingHistory || syncing}
-                title="Request up to 24 months of transaction history from Plaid. Transactions sync automatically via webhook — no need to click Sync."
-                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
-                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
-              >
-                <span className="sm:hidden">{loadingHistory ? '⏳' : '📜'}</span>
-                <span className="hidden sm:inline">{loadingHistory ? 'Loading…' : 'Load History'}</span>
               </button>
             )}
             {!isTracking && connection && newAccountsAvailable && !relinkRequired && (

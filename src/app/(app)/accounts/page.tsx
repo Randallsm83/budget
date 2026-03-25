@@ -6,6 +6,7 @@ import Link from 'next/link'
 import { AddAccountModal } from '@/components/AddAccountModal'
 import { closeAccount, deleteAccount } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
+import { useAdminMode } from '@/lib/admin-mode'
 
 interface Account {
   id: string
@@ -138,7 +139,8 @@ export default function AccountsPage() {
   const [cleaningUp, setCleaningUp] = useState(false)
   const [cleanupMsg, setCleanupMsg] = useState('')
   const [, startTransition] = useTransition()
-  const [errors, setErrors] = useState<Record<string, string>>({})
+  const [errors, setErrors] = useState<Record<string, string>>({}) 
+  const [adminMode] = useAdminMode()
 
   async function loadAccounts() {
     const res = await fetch('/api/accounts')
@@ -213,14 +215,16 @@ export default function AccountsPage() {
         </div>
         <div className="flex items-center gap-2">
           {cleanupMsg && <span className="text-xs text-[#8a8fad]">{cleanupMsg}</span>}
-          <button
-            onClick={handleCleanupOrphans}
-            disabled={cleaningUp}
-            title="Delete empty accounts with no bank connection (orphaned duplicates from reconnect issues)"
-            className="border border-[#ce6f8f]/50 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f] font-medium px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
-          >
-            {cleaningUp ? 'Cleaning…' : '⚠ Clean up orphans'}
-          </button>
+          {adminMode && (
+            <button
+              onClick={handleCleanupOrphans}
+              disabled={cleaningUp}
+              title="Delete empty accounts with no bank connection (orphaned duplicates from reconnect issues)"
+              className="border border-[#ce6f8f]/50 hover:border-[#ce6f8f] text-[#ce6f8f]/70 hover:text-[#ce6f8f] font-medium px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50"
+            >
+              {cleaningUp ? 'Cleaning…' : '⚠ Clean up orphans'}
+            </button>
+          )}
           <button
             onClick={() => setShowModal(true)}
             className="bg-[#b3a1e6] hover:bg-[#c678dd] text-[#1a1b2e] font-semibold px-4 py-1.5 rounded-lg text-sm transition-colors"

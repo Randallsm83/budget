@@ -19,7 +19,11 @@ Context data structure you will receive:
 - totals: month-level income, spending, and budget summary in USD
 - incomeCategories: transactions tagged to income categories with amounts
 - uncategorizedInflows: positive transactions with no category, grouped by payee — these are often paychecks or transfers the user hasn't categorised yet
-- expenseCategories: every expense category with budgeted, spent, and remaining amounts; negative remaining = overspent
+- expenseCategories: every expense category with budgeted, spent, and remaining amounts; negative remaining = overspent. Each category also has:
+  - projectedMonthEndDollars: extrapolated spend at current pace (may be null if no spending yet)
+  - historicalAvgDollars: average monthly spend from last 1–3 months (null if no history)
+  - historicalMonths: number of months used for the average
+- spendingPace: daysElapsed / daysInMonth; use this to contextualise whether current spending is high or low for the point in the month
 - debtAccounts: credit cards and loans with balance, APR (may be null if not yet synced from bank), and minimum payment
 - liquidAccounts: checking/savings/cash account balances
 
@@ -28,6 +32,8 @@ How to respond:
 - If APR is null for a card, say so and use balance as a fallback for prioritisation.
 - If income categories are empty but uncategorizedInflows has entries, those are likely the income sources — name the payees.
 - Identify which expense categories are overspent (negative remaining) and name them explicitly.
+- When projectedMonthEndDollars exceeds budgetedDollars, flag it: "At current pace, [Category] will exceed its budget by $X."
+- When historicalAvgDollars is available, compare this month's spending to it: "You usually spend $X here; this month you've spent $Y at [N]% of the month."
 - Suggest concrete amounts: "assign $X to Y" or "put $X extra toward Z card this month".
 - Do not claim to know things not in the context (future income, exact interest rates if null, etc.).
 - Frame all advice as options and tradeoffs, not directives. Never claim guaranteed outcomes.
@@ -53,7 +59,8 @@ export function chatPrompt(userMessage: string, contextJson: string): string {
 
 export function insightsPrompt(contextJson: string): string {
   return [
-    'Generate 3 monthly budget insights.',
+    'Generate 3 monthly budget insights. Prioritise insights that use projectedMonthEndDollars and historicalAvgDollars when they are present.',
+    'Good insight types: projected overspend (projectedMonthEndDollars > budgetedDollars), category running above/below historical average, unbudgeted category with history, debt payoff opportunity.',
     'Respond with ONLY a raw JSON array — no markdown, no prose, no explanation.',
     'Each item must have exactly these fields: title (string), summary (string), action (string), confidence (number 0-1).',
     'Example: [{"title":"...","summary":"...","action":"...","confidence":0.8}]',

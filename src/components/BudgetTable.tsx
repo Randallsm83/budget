@@ -37,6 +37,7 @@ export interface CategoryRow {
   activity: number // milliunits
   balance: number // milliunits
   isCCPayment: boolean
+  suggested?: number // milliunits — 3-month average spend; shown as a one-click suggestion
 }
 
 export interface GroupRow {
@@ -133,8 +134,8 @@ function SortableGroupItem({ id, children }: { id: string; children: (s: DragSlo
 // ---------------------------------------------------------------------------
 // Inline editable cell
 // ---------------------------------------------------------------------------
-function EditableBudgeted({ categoryId, month, value, className = 'w-28' }: {
-  categoryId: string; month: string; value: number; className?: string
+function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-28' }: {
+  categoryId: string; month: string; value: number; suggested?: number; className?: string
 }) {
   const [editing, setEditing] = useState(false)
   const [inputVal, setInputVal] = useState('')
@@ -161,6 +162,11 @@ function EditableBudgeted({ categoryId, month, value, className = 'w-28' }: {
     startTransition(() => setBudgeted(categoryId, month, amount))
   }
 
+  function applySuggestion() {
+    if (!suggested) return
+    startTransition(() => setBudgeted(categoryId, month, suggested))
+  }
+
   if (editing) {
     return (
       <input
@@ -174,13 +180,25 @@ function EditableBudgeted({ categoryId, month, value, className = 'w-28' }: {
     )
   }
   return (
-    <button
-      onClick={() => { setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
-      disabled={isPending}
-      className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
-    >
-      {formatMoney(value)}
-    </button>
+    <div className="flex flex-col items-end gap-0.5">
+      <button
+        onClick={() => { setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
+        disabled={isPending}
+        className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
+      >
+        {formatMoney(value)}
+      </button>
+      {value === 0 && suggested && suggested > 0 && (
+        <button
+          onClick={applySuggestion}
+          disabled={isPending}
+          title={`Apply 3-month average: ${formatMoney(suggested)}`}
+          className="text-[10px] text-[#42b3c2] hover:text-[#5ccc96] tabular-nums px-1.5 py-px rounded border border-[#42b3c2]/30 hover:border-[#5ccc96]/50 bg-[#42b3c2]/5 hover:bg-[#5ccc96]/10 transition-colors disabled:opacity-50 flex-shrink-0"
+        >
+          ~{formatMoney(suggested)} avg ↑
+        </button>
+      )}
+    </div>
   )
 }
 
@@ -337,7 +355,7 @@ function CategoryItemRow({ cat, month, rta, error, onSaveName, onDelete, dragHan
             {/* Row 2: budget numbers */}
             <div className="flex items-center gap-2 px-4 pb-2.5 pl-9 text-xs">
               <span className="text-[10px] text-[#8a8fad] shrink-0">Assigned</span>
-              <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} className="w-20 text-right text-xs" />
+              <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} className="w-20 text-right text-xs" />
               <span className="text-[#3a3b58] shrink-0">·</span>
               <span className="text-[10px] text-[#8a8fad] shrink-0">Spent</span>
               <Amount value={cat.activity} className="text-xs" />
@@ -377,7 +395,7 @@ function CategoryItemRow({ cat, month, rta, error, onSaveName, onDelete, dragHan
           </span>
         )}
         <div className="flex justify-end pr-2">
-          <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} />
+          <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} />
         </div>
         <Amount value={cat.activity} className="text-right text-sm pr-2" />
         {/* Balance cell: Cover button (always visible when negative) + amount */}
