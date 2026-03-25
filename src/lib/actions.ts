@@ -7,6 +7,7 @@ import { db } from '@/db'
 import { accounts, categories, categoryGroups, importConnections, investmentHoldings, liabilityDetails, monthBudgets, transactions, payeeRules, users } from '@/db/schema'
 import { normalizePayee } from '@/lib/payee'
 import { removeItem } from '@/lib/plaid-item'
+import { TRANSFER_RE } from '@/lib/plaid-sync'
 
 // ---------------------------------------------------------------------------
 // Internal helpers
@@ -342,6 +343,45 @@ export async function updateTransactionCategory(id: string, categoryId: string |
   const month = txn.date.substring(0, 7)
   revalidatePath(`/budget/${month}`)
   revalidatePath(`/accounts/${txn.accountId}`)
+}
+
+/**
+ * Re-scans all imported transactions for an account and marks any that match
+ * the current transfer detection rules as isTransfer=true (clearing category).
+ * Only promotes false→true; never demotes user-manually-set transfers.
+ * Returns the number of transactions updated.
+ */
+export async function reapplyTransferDetection(accountId: string): Promise<{ updated: number }> {
+  const userId = await requireUser()
+
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, accountId), eq(accounts.userId, userId)),
+  })
+  if (!account) throw new Error('Account not found')
+
+  // Only scan imported (Plaid) transactions not already marked as transfers
+  const rows = await db
+    .select({ id: transactions.id, payee: transactions.payee })
+    .from(transactions)
+    .where(and(
+      eq(transactions.accountId, accountId),
+      eq(transactions.userId, userId),
+      eq(transactions.isTransfer, false),
+      isNotNull(transactions.importId),
+    ))
+
+  const toFix = rows.filter((t) => t.payee && TRANSFER_RE.test(t.payee))
+  if (toFix.length === 0) return { updated: 0 }
+
+  const ids = toFix.map((t) => t.id)
+  await db
+    .update(transactions)
+    .set({ isTransfer: true, categoryId: null, updatedAt: new Date() })
+    .where(inArray(transactions.id, ids))
+
+  revalidatePath(`/accounts/${accountId}`)
+  revalidatePath('/budget')
+  return { updated: toFix.length }
 }
 
 export async function toggleTransfer(id: string) {

@@ -1,0 +1,14 @@
+{
+  "mcpServers": {
+    "plaid": {
+      "command": "uvx",
+      "args": [
+        "mcp-server-plaid",
+        "--client-id",
+        "69b9ec367c84fc000c085dc8",
+        "--secret",
+        "6fdf8b696596fafa983af76e8d6751"
+      ]
+    }
+  }
+}
