@@ -345,15 +345,12 @@ export async function updateTransactionCategory(id: string, categoryId: string |
   revalidatePath(`/accounts/${txn.accountId}`)
 }
 
-// Patterns that were incorrectly added to TRANSFER_RE in a prior commit.
-// CC bill payments (autopay, bill payment, online payment, etc.) should be
-// categorized to the CC Payment category — NOT marked as isTransfer.
-const CC_PAYMENT_RE = /\b(autopay|auto[- ]pay|online payment|internet payment|mobile payment|electronic payment|bill pay(?:ment)?|payment thank you|payment received|payment - thank you|credit card payment|direct debit)\b/i
-
 /**
- * Un-marks imported transactions that were incorrectly flagged as isTransfer
- * due to CC bill payment patterns (autopay, bill payment, etc.).
- * These should be categorised to the CC Payment category instead.
+ * Un-marks imported transactions that are flagged as isTransfer but whose
+ * payee does NOT match the current valid TRANSFER_RE. Any imported transfer
+ * that isn't a genuine bank-to-bank movement (ACH, wire, "Transfer to/from")
+ * was incorrectly flagged and should be un-marked so payee rules can
+ * categorise it to the right CC Payment category.
  */
 export async function revertIncorrectTransfers(accountId: string): Promise<{ reverted: number }> {
   const userId = await requireUser()
@@ -363,7 +360,7 @@ export async function revertIncorrectTransfers(accountId: string): Promise<{ rev
   })
   if (!account) throw new Error('Account not found')
 
-  // Find imported transactions currently marked as transfers that match CC payment patterns
+  // All imported transactions currently marked as transfers
   const rows = await db
     .select({ id: transactions.id, payee: transactions.payee })
     .from(transactions)
@@ -374,7 +371,9 @@ export async function revertIncorrectTransfers(accountId: string): Promise<{ rev
       isNotNull(transactions.importId),
     ))
 
-  const toRevert = rows.filter((t) => t.payee && CC_PAYMENT_RE.test(t.payee))
+  // Keep only transfers whose payee does NOT match a genuine bank-to-bank pattern.
+  // If it's not ACH/wire/"Transfer to..", it was incorrectly flagged.
+  const toRevert = rows.filter((t) => !t.payee || !TRANSFER_RE.test(t.payee))
   if (toRevert.length === 0) return { reverted: 0 }
 
   const ids = toRevert.map((t) => t.id)
