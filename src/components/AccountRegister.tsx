@@ -8,7 +8,7 @@ import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
 import { PlaidRelink } from './PlaidRelink'
 import { PlaidNewAccounts } from './PlaidNewAccounts'
-import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, reapplyTransferDetection, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
 
@@ -859,6 +859,30 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                 title="Delete all bank-imported transactions for this bank and re-sync from scratch. Fixes crossed transactions between accounts."
               >
                 {repairing ? 'Repairing…' : '⚠ Repair'}
+              </button>
+            )}
+            {!isTracking && adminMode && (
+              <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
+                onClick={async () => {
+                  setRepairing(true)
+                  setSyncResult(null)
+                  try {
+                    const r = await reapplyTransferDetection(account.id)
+                    setSyncResult(r.updated === 0
+                      ? 'No misclassified transfers found'
+                      : `Marked ${r.updated} transaction${r.updated !== 1 ? 's' : ''} as transfers`)
+                  } catch (e) {
+                    setSyncResult(`Fix failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+                  } finally {
+                    setRepairing(false)
+                  }
+                }}
+                disabled={repairing || syncing}
+                title="Re-scan imported transactions and mark CC payments/transfers that were missed on import"
+              >
+                {repairing ? 'Scanning…' : '↻ Fix transfers'}
               </button>
             )}
             {!isTracking && adminMode && (

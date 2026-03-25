@@ -8,7 +8,20 @@ import { normalizePayee } from '@/lib/payee'
 import { getPlaidCategoryHints } from '@/lib/plaidCategories'
 import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
-const TRANSFER_RE = /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i
+// Payee patterns that indicate a bank transfer or CC bill payment.
+// Matches anywhere in the string (word boundary) to catch bank-prefixed names
+// like "Chase Online Transfer" or "BofA AutoPay".
+// Exported so the retroactive fix action in actions.ts can reuse the same logic.
+export const TRANSFER_RE = /\b(online transfer|ach transfer|wire transfer|book transfer|autopay|auto[- ]pay|online payment|internet payment|mobile payment|electronic payment|bill pay(?:ment)?|payment thank you|payment received|payment - thank you|credit card payment|direct debit)\b|^transfer (from|to|between)/i
+
+// Plaid personal_finance_category.detailed codes that unambiguously indicate
+// a transfer or CC bill payment rather than a categorizable expense.
+// Exported for retroactive use in actions.ts.
+export const TRANSFER_PFC_CODES = new Set([
+  'TRANSFER_IN_ACCOUNT_TRANSFER',
+  'TRANSFER_OUT_ACCOUNT_TRANSFER',
+  'LOAN_PAYMENTS_CREDIT_CARD_PAYMENT',
+])
 
 type SyncConnection = typeof importConnections.$inferSelect
 
@@ -95,7 +108,10 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
       added.map((t) => {  // satisfies array overload
         const storedPayee = t.merchant_name ?? t.name
         const key = storedPayee ? normalizePayee(storedPayee) : null
-        const isTransfer = !!storedPayee && TRANSFER_RE.test(storedPayee)
+        const isTransfer =
+          (!!storedPayee && TRANSFER_RE.test(storedPayee)) ||
+          (t.personal_finance_category?.detailed != null &&
+            TRANSFER_PFC_CODES.has(t.personal_finance_category.detailed))
         const categoryId = isTransfer ? null :
           (key ? ruleMap.get(key) : undefined)
           ?? hintCategory(t.personal_finance_category?.primary, t.personal_finance_category?.detailed)
