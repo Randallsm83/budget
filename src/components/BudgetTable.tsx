@@ -5,6 +5,23 @@ import { setBudgeted } from '@/lib/actions'
 import { formatMoney, parseMoney, getBankBrand } from '@/lib/budget'
 import Link from 'next/link'
 
+/** Spent amount — links to the transactions page for that category + month. */
+function ActivityLink({ value, categoryId, month, className = '' }: {
+  value: number; categoryId: string; month: string; className?: string
+}) {
+  const color = value < 0 ? 'text-[#ce6f8f]' : value > 0 ? 'text-[#5ccc96]' : 'text-[#8a8fad]'
+  if (value === 0) return <span className={`tabular-nums ${color} ${className}`}>{formatMoney(value)}</span>
+  return (
+    <Link
+      href={`/transactions?category=${categoryId}&month=${month}`}
+      className={`tabular-nums ${color} hover:underline hover:opacity-80 ${className}`}
+      title="View transactions for this category"
+    >
+      {formatMoney(value)}
+    </Link>
+  )
+}
+
 export interface CategoryRow {
   id: string
   name: string
@@ -169,7 +186,7 @@ function CategoryItemRow({ cat, month, rta }: {
         <div className="flex justify-end pr-2">
           <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} />
         </div>
-        <Amount value={cat.activity} className="text-right text-sm pr-2" />
+        <ActivityLink value={cat.activity} categoryId={cat.id} month={month} className="text-right text-sm pr-2 block" />
         <div className="flex items-center justify-end gap-1.5">
           {showCover && <CoverButton categoryId={cat.id} month={month} budgeted={cat.budgeted} balance={cat.balance} rta={rta} />}
           <Amount value={cat.balance} className="text-sm font-medium" />
