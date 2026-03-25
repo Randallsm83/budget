@@ -8,7 +8,7 @@ import { CsvImportModal } from './CsvImportModal'
 import { PlaidLink } from './PlaidLink'
 import { PlaidRelink } from './PlaidRelink'
 import { PlaidNewAccounts } from './PlaidNewAccounts'
-import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, reapplyTransferDetection, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
+import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, reapplyTransferDetection, revertIncorrectTransfers, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
 
@@ -912,7 +912,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                   try {
                     const r = await reapplyTransferDetection(account.id)
                     setSyncResult(r.updated === 0
-                      ? 'No misclassified transfers found'
+                      ? 'No new transfers found'
                       : `Marked ${r.updated} transaction${r.updated !== 1 ? 's' : ''} as transfers`)
                   } catch (e) {
                     setSyncResult(`Fix failed: ${e instanceof Error ? e.message : 'unknown error'}`)
@@ -921,9 +921,33 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
                   }
                 }}
                 disabled={repairing || syncing}
-                title="Re-scan imported transactions and mark CC payments/transfers that were missed on import"
+                title="Mark missed bank-to-bank transfers (ACH, wire, online transfer)"
               >
                 {repairing ? 'Scanning…' : '↻ Fix transfers'}
+              </button>
+            )}
+            {!isTracking && adminMode && (
+              <button
+                className={`${showSecondary ? 'flex' : 'hidden'} sm:flex border border-[#3a3b58] hover:border-[#b3a1e6] text-[#8a8fad] hover:text-[#b3a1e6]
+                           font-medium px-2.5 sm:px-3 py-1.5 rounded-lg text-sm transition-colors disabled:opacity-50`}
+                onClick={async () => {
+                  setRepairing(true)
+                  setSyncResult(null)
+                  try {
+                    const r = await revertIncorrectTransfers(account.id)
+                    setSyncResult(r.reverted === 0
+                      ? 'No incorrectly-flagged CC payments found'
+                      : `Unflagged ${r.reverted} CC payment${r.reverted !== 1 ? 's' : ''} — apply Rules to re-categorize`)
+                  } catch (e) {
+                    setSyncResult(`Revert failed: ${e instanceof Error ? e.message : 'unknown error'}`)
+                  } finally {
+                    setRepairing(false)
+                  }
+                }}
+                disabled={repairing || syncing}
+                title="Un-flag CC payments (autopay, bill payment) that were incorrectly marked as bank transfers"
+              >
+                {repairing ? 'Reverting…' : '↩ Revert CC pmts'}
               </button>
             )}
             {!isTracking && adminMode && (
