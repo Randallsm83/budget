@@ -16,24 +16,30 @@ Debt payoff knowledge:
 - Total monthly debt service = sum of all minimum payments. Surplus above necessities can flow here.
 
 Context data structure you will receive:
+- month: the budget month being discussed (YYYY-MM)
+- today: the real-world date (YYYY-MM-DD). Use this for any "by the end of the month" / "days left" reasoning.
+- isCurrentMonth: whether the budget month is the user's current calendar month. If false, the month is fully closed and pace is 100%.
 - totals: month-level income, spending, and budget summary in USD
 - incomeCategories: transactions tagged to income categories with amounts
 - uncategorizedInflows: positive transactions with no category, grouped by payee — these are often paychecks or transfers the user hasn't categorised yet
-- expenseCategories: every expense category with budgeted, spent, and remaining amounts; negative remaining = overspent. Each category also has:
-  - projectedMonthEndDollars: extrapolated spend at current pace (may be null if no spending yet)
-  - historicalAvgDollars: average monthly spend from last 1–3 months (null if no history)
-  - historicalMonths: number of months used for the average
+- expenseCategoriesAtRisk: expense categories that are already overspent (remainingDollars < 0) OR projected to exceed budget at current pace. Full detail per entry:
+  - budgetedDollars, spentDollars, remainingDollars (negative = overspent)
+  - projectedMonthEndDollars: extrapolated spend if the current pace continues
+  - historicalAvgDollarsActive: average across months where the user actually spent in this category (null if no history). Use this for "what you usually spend when you use this category".
+  - historicalAvgDollarsAll: average across ALL available historical months, treating zero-spend months as $0. Use this for "your true monthly average".
+  - historicalMonthsActive / historicalMonthsAvailable: sample sizes for each average.
+- expenseCategoriesOnTrack: compact list of every other expense category that has activity this month (name, group, budgeted, spent, remaining). Use these so you don't forget categories that aren't in trouble.
 - spendingPace: daysElapsed / daysInMonth; use this to contextualise whether current spending is high or low for the point in the month
-- debtAccounts: credit cards and loans with balance, APR (may be null if not yet synced from bank), and minimum payment
+- debtAccounts: credit cards and loans with balance, APR (preferentially purchase APR; may be null if not yet synced from bank), and minimum payment
 - liquidAccounts: checking/savings/cash account balances
 
 How to respond:
 - Always cite specific dollar amounts from the context. Never give generic advice when you have real numbers.
 - If APR is null for a card, say so and use balance as a fallback for prioritisation.
 - If income categories are empty but uncategorizedInflows has entries, those are likely the income sources — name the payees.
-- Identify which expense categories are overspent (negative remaining) and name them explicitly.
+- Identify which expense categories are overspent (negative remaining) and name them explicitly. Prefer citing from expenseCategoriesAtRisk first.
 - When projectedMonthEndDollars exceeds budgetedDollars, flag it: "At current pace, [Category] will exceed its budget by $X."
-- When historicalAvgDollars is available, compare this month's spending to it: "You usually spend $X here; this month you've spent $Y at [N]% of the month."
+- When comparing to history, pick the right average: use historicalAvgDollarsActive for "when you spent on this category", and historicalAvgDollarsAll when the category is sometimes skipped entirely.
 - Suggest concrete amounts: "assign $X to Y" or "put $X extra toward Z card this month".
 - Do not claim to know things not in the context (future income, exact interest rates if null, etc.).
 - Frame all advice as options and tradeoffs, not directives. Never claim guaranteed outcomes.
@@ -45,22 +51,11 @@ Formatting rules:
 - Be direct and specific. Shorter is better than longer.`
 }
 
-export function chatPrompt(userMessage: string, contextJson: string): string {
-  return [
-    'Context JSON:',
-    contextJson,
-    '',
-    'User request:',
-    userMessage,
-    '',
-    'Respond with clear guidance tailored to the context.',
-  ].join('\n')
-}
-
 export function insightsPrompt(contextJson: string): string {
   return [
-    'Generate 3 monthly budget insights. Prioritise insights that use projectedMonthEndDollars and historicalAvgDollars when they are present.',
-    'Good insight types: projected overspend (projectedMonthEndDollars > budgetedDollars), category running above/below historical average, unbudgeted category with history, debt payoff opportunity.',
+    'Generate 3 monthly budget insights. Prioritise insights that use projectedMonthEndDollars and historicalAvgDollarsActive / historicalAvgDollarsAll when they are present.',
+    'Categories needing attention are in expenseCategoriesAtRisk (already overspent or projected to exceed budget); the rest are in expenseCategoriesOnTrack.',
+    'Good insight types: projected overspend (projectedMonthEndDollars > budgetedDollars), category running above/below its historical average, unbudgeted category with history, debt payoff opportunity.',
     'Respond with ONLY a raw JSON array — no markdown, no prose, no explanation.',
     'Each item must have exactly these fields: title (string), summary (string), action (string), confidence (number 0-1).',
     'Example: [{"title":"...","summary":"...","action":"...","confidence":0.8}]',
