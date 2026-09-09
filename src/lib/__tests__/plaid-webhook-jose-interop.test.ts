@@ -38,11 +38,14 @@ describe('JOSE interop', () => {
       .sign(privateKey)
 
     // Pin the wire format itself, so this fails even without a working verifier:
-    // ES256 in JOSE is a bare 64-byte r||s pair. DER would be ~70 bytes and start
-    // with the 0x30 SEQUENCE tag.
+    // ES256 in JOSE is a bare 64-byte r||s pair, whereas DER runs ~70 bytes.
+    //
+    // Length alone is the whole check. Asserting the first byte is not DER's 0x30
+    // SEQUENCE tag would be flaky: r is uniform, so a valid signature starts with
+    // 0x30 about 1 run in 256 (measured 12/3000 = 0.40%). A 64-byte DER encoding
+    // would need both r and s to be ~29 bytes, which is astronomically unlikely.
     const signature = Buffer.from(jwt.split('.')[2], 'base64url')
     expect(signature.length).toBe(64)
-    expect(signature[0]).not.toBe(0x30)
 
     expect(await verifyPlaidWebhook(body, jwt)).toEqual({ ok: true })
   })
