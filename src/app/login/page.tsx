@@ -4,11 +4,14 @@ import Image from 'next/image'
 import { signIn } from 'next-auth/react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { useState, Suspense } from 'react'
+import { safeCallbackUrl } from '@/lib/safe-redirect'
 
 function LoginForm() {
   const router = useRouter()
   const searchParams = useSearchParams()
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/budget'
+  // Never hand a raw query parameter to router.push - Next routes anything it deems
+  // off-origin (including javascript:) straight into location.assign.
+  const callbackUrl = safeCallbackUrl(searchParams.get('callbackUrl'))
 
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
