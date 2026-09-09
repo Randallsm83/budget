@@ -34,6 +34,25 @@ yarn-error.log*
 .env*
 !.env.local.example
 
+# agent/editor tool configs - these get rewritten with RESOLVED literal
+# credentials by MCP tooling; keep them local-only (see .env.local)
+.claude.json
+.mcp.json
+.claude/
+.cursor/
+.aider*
+
+# key/cert material (*.pem covered above)
+*.key
+*.crt
+*.p12
+*.pfx
+
+# local data exports (transactions, balances)
+*.csv
+*.sqlite
+*.db
+
 # vercel
 .vercel
 
