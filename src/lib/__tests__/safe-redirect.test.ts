@@ -50,12 +50,19 @@ describe('safeCallbackUrl', () => {
     for (const raw of HOSTILE) expect(safeCallbackUrl(raw)).toBe('/budget')
   })
 
-  // Models the real entry point. A literal '%09' string is NOT hostile to this
-  // function - it stays percent-encoded and resolves same-origin - which is why it is
-  // absent from HOSTILE above. The attack is that useSearchParams decodes it to a real
-  // tab first, and the tab is what the URL parser then strips. Pin both halves so the
-  // chain cannot be broken by "fixing" only one.
-  it('rejects a tab smuggled into the query string as %09', () => {
+  // Models the real entry point, and pins where this function's contract begins.
+  // Decoding happens in URLSearchParams, upstream of us: the encoded form is a plain
+  // same-origin path and must survive untouched, while the decoded form is the actual
+  // attack because the URL parser strips a real tab. Asserting BOTH halves documents
+  // the boundary - a future refactor that reads window.location.search directly, or
+  // that decodes twice, changes which half arrives here and one of these will fail.
+  it('treats the encoded and decoded forms of %09 differently, per the decode boundary', () => {
+    // Encoded: harmless, stays a path, must not be mangled into the fallback.
+    expect(safeCallbackUrl('/%09/evil.example')).toBe('/%09/evil.example')
+    expect(new URL('/%09/evil.example', ORIGIN).origin).toBe(ORIGIN)
+
+    // Decoded upstream by URLSearchParams: this is what actually reaches us, and it
+    // resolves to an authority once the parser strips the tab.
     const decoded = new URLSearchParams('callbackUrl=/%09/evil.example').get('callbackUrl')
     expect(decoded).toBe('/\t/evil.example')
     expect(safeCallbackUrl(decoded)).toBe('/budget')
