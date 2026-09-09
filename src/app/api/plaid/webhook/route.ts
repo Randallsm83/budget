@@ -4,6 +4,7 @@ import { db } from '@/db'
 import { importConnections } from '@/db/schema'
 import { syncTransactions } from '@/lib/plaid-sync'
 import { plaidLog } from '@/lib/plaid-logger'
+import { verifyPlaidWebhook } from '@/lib/plaid-webhook-verify'
 
 /** Flag every connection sharing this Item as needing re-authentication. */
 async function markRelinkRequired(plaidItemId: string) {
@@ -13,9 +14,10 @@ async function markRelinkRequired(plaidItemId: string) {
     .where(eq(importConnections.plaidItemId, plaidItemId))
 }
 
-// Plaid sends webhooks as server-to-server POST requests — no user session here.
-// In production you should verify the Plaid-Verification JWT header using
-// /webhook_verification_key/get before trusting the payload.
+// Plaid sends webhooks as server-to-server POST requests - there is no user
+// session here, so the ES256 `Plaid-Verification` JWT is the only thing that
+// distinguishes a real Plaid delivery from an anonymous forgery. Verified
+// before the payload is parsed or acted on.
 
 interface PlaidWebhookBody {
   webhook_type?: string
@@ -26,9 +28,26 @@ interface PlaidWebhookBody {
 }
 
 export async function POST(req: NextRequest) {
+  // The signature covers the RAW body: re-serializing parsed JSON would not
+  // reproduce Plaid's digest, so read text first and parse afterwards.
+  const rawBody = await req.text()
+
+  const verification = await verifyPlaidWebhook(rawBody, req.headers.get('plaid-verification'))
+  if (!verification.ok) {
+    plaidLog('error', {
+      route: 'plaid/webhook',
+      errorMessage: `rejected unverified webhook: ${verification.reason}`,
+    })
+    // 401 (not 200) so a genuine delivery that failed on a transient key-fetch
+    // outage is retried by Plaid rather than silently dropped.
+    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
+  }
+
   let body: PlaidWebhookBody
   try {
-    body = (await req.json()) as PlaidWebhookBody
+    // Shape is unenforced but every field is optional and guarded below; the
+    // payload's origin is already proven by the signature check above.
+    body = JSON.parse(rawBody) as PlaidWebhookBody
   } catch {
     return NextResponse.json({ error: 'Invalid JSON' }, { status: 400 })
   }
