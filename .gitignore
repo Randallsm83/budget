@@ -53,6 +53,10 @@ yarn-error.log*
 *.sqlite
 *.db
 
+# signed policy docs at repo root - real name, email, signature block,
+# and local workstation paths; keep local, do not publish
+/*.pdf
+
 # vercel
 .vercel
 
