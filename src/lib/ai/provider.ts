@@ -1,7 +1,20 @@
 import { applySafetyPostProcessing } from '@/lib/ai/guards'
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+// Optional Caveman gateway (LLM spend metering). Unset → providers directly.
+const caveGateway = process.env.CAVE_GATEWAY_URL?.replace(/\/+$/, '')
+const OPENAI_API_URL = caveGateway
+  ? `${caveGateway}/w/budget/v1/chat/completions`
+  : 'https://api.openai.com/v1/chat/completions'
+const ANTHROPIC_API_URL = caveGateway
+  ? `${caveGateway}/w/budget/v1/messages`
+  : 'https://api.anthropic.com/v1/messages'
+// Record only: forward bytes unchanged even if the gateway runs a compression mode.
+// x-cave-workflow groups gateway spend by the job that made the call.
+function caveHeaders(workflow: string): Record<string, string> {
+  return caveGateway
+    ? { 'x-cave-transforms': 'caveman.pass-through.v1', 'x-cave-workflow': workflow }
+    : {}
+}
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -9,7 +22,8 @@ function requireEnv(name: string): string {
   return value
 }
 
-export async function generateText(system: string, user: string): Promise<string> {
+/** `workflow`: Caveman workflow slug for the calling job (lowercase [a-z0-9_-]). */
+export async function generateText(system: string, user: string, workflow: string): Promise<string> {
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY
   if (anthropicApiKey) {
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-3-5-sonnet-20241022'
@@ -19,6 +33,7 @@ export async function generateText(system: string, user: string): Promise<string
         'Content-Type': 'application/json',
         'x-api-key': anthropicApiKey,
         'anthropic-version': '2023-06-01',
+        ...caveHeaders(workflow),
       },
       body: JSON.stringify({
         model,
@@ -55,6 +70,7 @@ export async function generateText(system: string, user: string): Promise<string
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      ...caveHeaders(workflow),
     },
     body: JSON.stringify({
       model,

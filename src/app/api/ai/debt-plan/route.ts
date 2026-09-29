@@ -27,6 +27,7 @@ export async function POST(req: NextRequest) {
     const raw = await generateText(
       systemPrompt(),
       debtPlanPrompt(JSON.stringify(context), method, monthlyPayment),
+      'debt-plan',
     )
     const candidate = safeJsonParse(raw, {
       method,
