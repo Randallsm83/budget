@@ -21,7 +21,7 @@ export async function POST(req: NextRequest) {
   try {
     const started = Date.now()
     const context = await buildMonthlyContext(userId, month)
-    const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)))
+    const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)), 'monthly-insights')
     const parsed = safeJsonParse<unknown[]>(raw, [])
 
     const insights = parsed

@@ -39,6 +39,7 @@ export async function POST(req: NextRequest) {
     const responseText = await generateText(
       systemPrompt(),
       chatPrompt(message, JSON.stringify(context)),
+      'budget-chat',
     )
 
     const validated = ChatMessageSchema.safeParse({ role: 'assistant', content: responseText })
