@@ -6,13 +6,19 @@ A personal budgeting app built on envelope budgeting principles (YNAB-style). As
 
 - Envelope budgeting — assign money to categories per month, carry balances forward
 - Account register — manual transactions, CSV import, or Plaid bank sync
+- Cross-account transactions page — search/filter all transactions by category, month, or account with inline edit/recategorize/delete (`src/app/(app)/transactions/page.tsx`)
+- Categories settings page — dedicated drag-and-drop manager for groups and categories, separate from the budget grid (`src/app/(app)/settings/categories/page.tsx`)
 - Payee auto-categorization — learns your corrections and applies them to future imports
 - TOTP two-factor authentication
 - Plaid integration — link bank accounts, auto-sync via webhooks, cursor-based incremental updates
 - Plaid production-ready — pre-Link consent UI, duplicate Item detection, `/item/remove` on disconnect and offboarding, structured logging with `request_id`
 - Update mode — automatic prompts to re-authenticate expired bank connections or add newly detected accounts
 - YNAB-style CC Payment tracking — spending auto-funds payment buckets, card balance shown live
-- Transfer detection — inter-account transfers excluded from budget math automatically
+- Transfer detection — inter-account transfers excluded from budget math; CC bill payments are intentionally NOT marked as transfers so they still affect the budget
+- AI Budget Coach — collapsible panel on the budget page combining spending forecast, monthly insights, and an Anthropic-powered chat assistant (`src/components/BudgetCoachSection.tsx`)
+- Spending forecast — deterministic, no-cost projections of month-end spend per category with at-risk / on-track breakdown (`src/components/SpendingForecastCard.tsx`)
+- Admin mode — localStorage toggle in Security settings that gates destructive Plaid actions (Clear transactions, Repair, Enrich payees, Clean up orphans)
+- Persistent app logs — `app_logs` table captures `warn` and `error` entries beyond Vercel's short log retention
 - Drag-and-drop reordering for budget groups, categories, and sidebar accounts
 
 ## Tech stack
@@ -144,6 +150,25 @@ npm run test:offboarding  # Plaid /item/remove integration test (uses sandbox cr
 ```
 
 Unit tests live in `src/lib/__tests__/`. The offboarding integration test (`scripts/test-offboarding.ts`) requires `PLAID_CLIENT_ID` and `PLAID_SANDBOX_SECRET` in `.env.local` and exercises the full `/item/remove` flow against the Plaid sandbox.
+
+## AI Budget Coach
+
+The budget page hosts a collapsible AI Coach section with three fixed-height panels:
+
+- **Spending forecast** (`SpendingForecastCard`) — purely deterministic projections from `POST /api/ai/forecast`; no LLM call, no per-render cost. Splits categories into _at risk_ vs _on track_ and accounts for fixed monthly charges so a single one-time bill doesn't trigger a false alarm.
+- **Insights** (`BudgetInsightsCard`) — monthly LLM-generated insights from `POST /api/ai/insights/monthly`; supports dismiss and "explain" hand-off into the chat panel.
+- **Assistant** (`AIAssistantPanel`) — chat backed by `POST /api/ai/chat` with envelope-budgeting system prompt; context built in `src/lib/ai/context.ts` and includes per-category spent vs. budgeted, income sources, APRs, historical averages, and pace.
+- **Debt paydown** (`DebtPaydownCard`) — calls `POST /api/ai/debt-plan` and renders avalanche/snowball recommendations.
+
+The collapsed state persists per browser in `localStorage` under `budget-coach-collapsed`. Set `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) in `.env.local` to enable LLM-backed panels. Optionally set `CAVE_GATEWAY_URL` (e.g. `http://127.0.0.1:8787`) to meter LLM spend through a Caveman gateway under app slug `budget`; requests opt out of gateway transforms, so bytes are forwarded unchanged.
+
+## Admin mode
+
+Destructive Plaid maintenance actions (Clear transactions, Repair, Enrich payees, Clean up orphans) are hidden behind an admin toggle. Enable it in `Settings → Security`; the state is stored in `localStorage` under `budget_admin_mode` via `useAdminMode()` in `src/lib/admin-mode.ts`.
+
+## Logging and diagnostics
+
+In addition to console output captured by Vercel, every `warn`/`error` entry is persisted to the `app_logs` table via `appLog()` in `src/lib/logger.ts`. Inspect logs by running `npm run db:studio` and opening the `app_logs` table. Plaid API calls continue to log structured JSON with `request_id` via `plaidLog()` in `src/lib/plaid-logger.ts`.
 
 ## Development workflow
 
