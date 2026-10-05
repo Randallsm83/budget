@@ -1,20 +1,22 @@
-import { createHash } from 'node:crypto'
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, desc, eq } from 'drizzle-orm'
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { aiAuditEvents, aiConversations, aiMessages } from '@/db/schema'
-import { buildMonthlyContext } from '@/lib/ai/context'
-import { generateChat, type ChatTurn } from '@/lib/ai/provider'
+import { buildMonthlyContext, chatContextPayload } from '@/lib/ai/context'
+import { generateChat, toChatHistory, type ChatTurn } from '@/lib/ai/provider'
 import { systemPrompt } from '@/lib/ai/prompts'
 import { isValidMonth } from '@/lib/budget'
 import { appLog } from '@/lib/logger'
 
-// Cap how many prior turns we feed back to the model. Anthropic prompt
+// Cap how many prior messages we feed back to the model. Anthropic prompt
 // caching keeps the per-turn cost low, but unbounded history still grows
-// the request linearly. A working set of ~20 user+assistant turns is
+// the request linearly. The last 20 messages (10 user+assistant pairs) are
 // plenty for a budgeting chat and well under any context window.
 const MAX_HISTORY_TURNS = 20
+// Longest accepted user message. The insights "Explain more" handoff is a
+// title plus a one-paragraph summary, far below this.
+const MAX_MESSAGE_CHARS = 2000
 const PROMPT_VERSION = 'v2-chat-cached'
 
 export async function POST(req: NextRequest) {
@@ -22,48 +24,50 @@ export async function POST(req: NextRequest) {
   if (!session?.user?.id) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   const userId = session.user.id
 
-  const body = await req.json().catch(() => null) as { message?: string; month?: string; conversationId?: string } | null
-  const message = body?.message?.trim()
+  const body = await req.json().catch(() => null) as { message?: unknown; month?: unknown; conversationId?: unknown } | null
+  const message = typeof body?.message === 'string' ? body.message.trim() : ''
   const month = typeof body?.month === 'string' ? body.month.trim() : ''
-  const incomingConversationId = body?.conversationId
+  const incomingConversationId = typeof body?.conversationId === 'string' ? body.conversationId : undefined
   if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
+  if (message.length > MAX_MESSAGE_CHARS) {
+    return NextResponse.json({ error: `message must be at most ${MAX_MESSAGE_CHARS} characters` }, { status: 400 })
+  }
   if (!isValidMonth(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
 
   const started = Date.now()
   const model = process.env.ANTHROPIC_MODEL ?? process.env.OPENAI_MODEL ?? 'unknown'
 
   try {
-    // Load (or create) the conversation. If a conversationId was supplied,
-    // verify it belongs to this user and pin month to the first user
-    // turn's metadata so the model never sees mixed-month history.
-    let conversationId = incomingConversationId
+    // If a conversationId was supplied, verify it belongs to this user, pin
+    // month to the first user turn's metadata so the model never sees
+    // mixed-month history, and load a bounded window of recent messages.
     let history: ChatTurn[] = []
 
-    if (conversationId) {
+    if (incomingConversationId) {
       const owned = await db
         .select({ id: aiConversations.id })
         .from(aiConversations)
-        .where(and(eq(aiConversations.id, conversationId), eq(aiConversations.userId, userId)))
+        .where(and(eq(aiConversations.id, incomingConversationId), eq(aiConversations.userId, userId)))
         .limit(1)
       if (owned.length === 0) {
         return NextResponse.json({ error: 'conversation not found' }, { status: 404 })
       }
 
-      const prior = await db
-        .select({
-          role: aiMessages.role,
-          content: aiMessages.content,
-          metadata: aiMessages.metadata,
-        })
-        .from(aiMessages)
-        .where(eq(aiMessages.conversationId, conversationId))
-        .orderBy(asc(aiMessages.createdAt))
-
       // Pin month: the first user turn in this conversation defines the
       // budget month. Subsequent requests against the same conversation
       // must match — switching months mid-chat would invalidate every
-      // dollar amount in the prior turns.
-      const firstUser = prior.find((m) => m.role === 'user')
+      // dollar amount in the prior turns. Fetched on its own because the
+      // history window below may no longer reach the first turn.
+      const [firstUser] = await db
+        .select({ metadata: aiMessages.metadata })
+        .from(aiMessages)
+        .where(and(
+          eq(aiMessages.conversationId, incomingConversationId),
+          eq(aiMessages.userId, userId),
+          eq(aiMessages.role, 'user'),
+        ))
+        .orderBy(asc(aiMessages.createdAt))
+        .limit(1)
       const pinnedMonth = (firstUser?.metadata as { month?: string } | null | undefined)?.month
       if (pinnedMonth && pinnedMonth !== month) {
         return NextResponse.json(
@@ -72,45 +76,39 @@ export async function POST(req: NextRequest) {
         )
       }
 
-      // Keep only user/assistant pairs the provider understands and bound
-      // the working set. Take the most recent N turns.
-      const usable = prior
-        .filter((m): m is { role: 'user' | 'assistant'; content: string; metadata: unknown } =>
-          m.role === 'user' || m.role === 'assistant',
-        )
-        .map((m) => ({ role: m.role, content: m.content }))
-      history = usable.slice(-MAX_HISTORY_TURNS)
+      const recent = await db
+        .select({ role: aiMessages.role, content: aiMessages.content })
+        .from(aiMessages)
+        .where(and(eq(aiMessages.conversationId, incomingConversationId), eq(aiMessages.userId, userId)))
+        .orderBy(desc(aiMessages.createdAt))
+        .limit(MAX_HISTORY_TURNS)
+      history = toChatHistory(recent)
     }
 
     const context = await buildMonthlyContext(userId, month)
-    const contextJson = JSON.stringify(context)
-    const contextHash = createHash('sha1').update(contextJson).digest('hex').slice(0, 12)
-
-    if (!conversationId) {
-      const inserted = await db.insert(aiConversations).values({
-        userId,
-        title: `Budget Coach ${month}`,
-      }).returning({ id: aiConversations.id })
-      conversationId = inserted[0].id
-    }
-
-    await db.insert(aiMessages).values({
-      conversationId,
-      userId,
-      role: 'user',
-      content: message,
-      metadata: { month, contextHash, contextGeneratedAt: context.generatedAt },
-    })
+    const { json: contextJson, hash: contextHash } = chatContextPayload(context)
 
     const responseText = await generateChat(systemPrompt(), contextJson, history, message, 'budget-chat')
 
-    await db.insert(aiMessages).values({
-      conversationId,
-      userId,
-      role: 'assistant',
-      content: responseText,
-      metadata: { month, contextHash, contextGeneratedAt: context.generatedAt },
-    })
+    // Persist only once the model has answered, writing the user and
+    // assistant turns in one statement: a failed call leaves no unanswered
+    // user turn (and no new conversation) behind.
+    let conversationId = incomingConversationId
+    if (!conversationId) {
+      const [inserted] = await db.insert(aiConversations).values({
+        userId,
+        title: `Budget Coach ${month}`,
+      }).returning({ id: aiConversations.id })
+      conversationId = inserted.id
+    }
+
+    const metadata = { month, contextHash, contextGeneratedAt: context.generatedAt }
+    // Explicit timestamps: a multi-row insert would give both rows the same
+    // now(), leaving the pair's order ambiguous when history is replayed.
+    await db.insert(aiMessages).values([
+      { conversationId, userId, role: 'user', content: message, metadata, createdAt: new Date(started) },
+      { conversationId, userId, role: 'assistant', content: responseText, metadata, createdAt: new Date() },
+    ])
 
     await db.insert(aiAuditEvents).values({
       userId,

@@ -22,6 +22,23 @@ const CHAT_MAX_TOKENS = 1500
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string }
 
+/**
+ * Newest-first `ai_messages` rows → provider history: oldest-first, strictly
+ * alternating user/assistant pairs. A user turn is kept only when the next
+ * row answers it, so a legacy unanswered user message, or a window that
+ * starts mid-pair, never puts two same-role turns side by side.
+ */
+export function toChatHistory(rowsNewestFirst: Array<{ role: string; content: string }>): ChatTurn[] {
+  const rows = [...rowsNewestFirst].reverse()
+  const history: ChatTurn[] = []
+  for (let i = 1; i < rows.length; i++) {
+    if (rows[i - 1].role === 'user' && rows[i].role === 'assistant') {
+      history.push({ role: 'user', content: rows[i - 1].content }, { role: 'assistant', content: rows[i].content })
+    }
+  }
+  return history
+}
+
 function requireEnv(name: string): string {
   const value = process.env[name]
   if (!value) throw new Error(`${name} is not configured`)
@@ -107,8 +124,8 @@ export async function generateText(system: string, user: string, workflow: strin
  * message instead of the full context. On OpenAI, the same data is passed
  * as plain message blocks (no caching primitive available).
  *
- * `history` MUST be ordered oldest-first and end just before the new user
- * message. The new user message is appended internally.
+ * `history` MUST be oldest-first user/assistant pairs (see `toChatHistory`);
+ * the new user message is appended internally.
  *
  * `workflow`: Caveman workflow slug for the calling job (lowercase [a-z0-9_-]).
  */
@@ -129,7 +146,8 @@ export async function generateChat(
     ]
 
     // First user turn carries the context JSON in its own cache-eligible
-    // block, then the history, then the new user message as a plain block.
+    // block. A fixed assistant ack follows it so the request always strictly
+    // alternates: context, ack, history pairs, new user message.
     const firstUserContent = [
       { type: 'text', text: `Context JSON:\n${contextJson}`, cache_control: { type: 'ephemeral' as const } },
     ]
@@ -137,18 +155,10 @@ export async function generateChat(
     type AnthropicMessage = { role: 'user' | 'assistant'; content: unknown }
     const messages: AnthropicMessage[] = [
       { role: 'user', content: firstUserContent },
+      { role: 'assistant', content: 'Understood. What would you like guidance on?' },
+      ...history,
+      { role: 'user', content: userMessage },
     ]
-    // If there is no prior history the model needs an assistant ack before
-    // we can continue with another user turn (alternation rule). We use a
-    // short acknowledgement so the cache key remains stable across turns.
-    if (history.length === 0) {
-      messages.push({ role: 'assistant', content: 'Understood. What would you like guidance on?' })
-    } else {
-      for (const turn of history) {
-        messages.push({ role: turn.role, content: turn.content })
-      }
-    }
-    messages.push({ role: 'user', content: userMessage })
 
     const res = await fetch(ANTHROPIC_API_URL, {
       method: 'POST',

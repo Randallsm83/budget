@@ -205,10 +205,12 @@ The budget page renders `BudgetCoachSection` below the budget grid. It is collap
 `DebtPaydownCard` is rendered separately and calls `POST /api/ai/debt-plan`. All four AI routes are wrapped in `try/catch` and call `appLog('error', ...)` so failures land in `app_logs`. `ANTHROPIC_API_KEY` (and optionally `ANTHROPIC_MODEL`) must be set in `.env.local` for LLM-backed panels.
 
 `POST /api/ai/chat` is a real multi-turn endpoint:
-- prior `ai_messages` for the given `conversationId` are loaded oldest-first and replayed to the model (capped at the last 20 turns)
-- the conversation's budget month is pinned to whatever the first user turn carried in `metadata.month`; mismatched subsequent requests return 409
-- every message stores `metadata.contextHash` (sha1 prefix of the rendered context JSON) and `metadata.contextGeneratedAt` so chat turns are reproducible against the live data they were grounded in
-- both successful and failed calls insert into `ai_audit_events` (failures carry `safetyFlags.error`), so latency/error dashboards see real rates
+- `message` is capped at 2000 characters (400 above that)
+- the last 20 `ai_messages` of the given `conversationId` (newest-first query with `LIMIT`, reversed) are replayed to the model through `toChatHistory()`, which keeps only answered user/assistant pairs so history always alternates
+- the conversation's budget month is pinned to whatever the first user turn carried in `metadata.month` (fetched separately, since the history window may not reach it); mismatched subsequent requests return 409
+- the user and assistant messages are written together, in one insert, only after the model call succeeds; a failed call leaves no unanswered user turn and creates no conversation
+- `chatContextPayload()` serialises the context without its per-call `generatedAt`, so the `cache_control` context block is byte-identical across turns until the data changes; every message stores `metadata.contextHash` (sha1 prefix of exactly that JSON) and `metadata.contextGeneratedAt` so chat turns are reproducible against the live data they were grounded in
+- both successful and failed calls insert into `ai_audit_events` (failures carry `safetyFlags.error`), so latency/error dashboards see real rates; the client only ever gets the generic `AI chat failed` 500 body
 
 ### Forecast accuracy guardrails
 The forecast intentionally avoids false alarms for fixed monthly bills:

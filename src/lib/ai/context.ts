@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { and, asc, eq, gte, lt, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts, monthBudgets, transactions, categories, categoryGroups, liabilityDetails } from '@/db/schema'
@@ -247,21 +248,7 @@ export async function buildMonthlyContext(userId: string, month: string) {
     .filter((c) => c.budgetedDollars > 0 || c.spentDollars > 0)
     .sort((a, b) => a.remainingDollars - b.remainingDollars)
 
-  // "At risk" = already overspent OR projected to exceed budget at current pace.
-  const expenseCategoriesAtRisk = expenseCategoriesAll.filter(
-    (c) => c.remainingDollars < 0 || c.projectedMonthEndDollars > c.budgetedDollars,
-  )
-  const atRiskNames = new Set(expenseCategoriesAtRisk.map((c) => c.name))
-  // Everything else: keep it compact so the model still knows it exists.
-  const expenseCategoriesOnTrack = expenseCategoriesAll
-    .filter((c) => !atRiskNames.has(c.name))
-    .map((c) => ({
-      name: c.name,
-      groupName: c.groupName,
-      budgetedDollars: c.budgetedDollars,
-      spentDollars: c.spentDollars,
-      remainingDollars: c.remainingDollars,
-    }))
+  const { atRisk: expenseCategoriesAtRisk, onTrack: expenseCategoriesOnTrack } = splitExpenseCategories(expenseCategoriesAll)
 
   // Income sources with actual received amounts (categorized)
   const incomeCategories = categoryRows
@@ -315,4 +302,50 @@ export async function buildMonthlyContext(userId: string, month: string) {
     transactionCount: txns.length,
     generatedAt: new Date().toISOString(),
   }
+}
+
+type ExpenseCategoryCompact = {
+  name: string
+  groupName: string
+  budgetedDollars: number
+  spentDollars: number
+  remainingDollars: number
+}
+
+/**
+ * Split expense categories into "at risk" (already overspent OR projected to
+ * exceed budget at current pace), kept in full detail, and a compact on-track
+ * tier the model can still cite. Decided per row in one pass (no name lookup),
+ * so same-named categories in different groups never drop each other.
+ */
+export function splitExpenseCategories<T extends ExpenseCategoryCompact & { projectedMonthEndDollars: number }>(
+  categories: T[],
+): { atRisk: T[]; onTrack: ExpenseCategoryCompact[] } {
+  const atRisk: T[] = []
+  const onTrack: ExpenseCategoryCompact[] = []
+  for (const c of categories) {
+    if (c.remainingDollars < 0 || c.projectedMonthEndDollars > c.budgetedDollars) {
+      atRisk.push(c)
+    } else {
+      onTrack.push({
+        name: c.name,
+        groupName: c.groupName,
+        budgetedDollars: c.budgetedDollars,
+        spentDollars: c.spentDollars,
+        remainingDollars: c.remainingDollars,
+      })
+    }
+  }
+  return { atRisk, onTrack }
+}
+
+/**
+ * The chat route sends this JSON as an Anthropic `cache_control` block, so it
+ * must be byte-identical across turns while the data is unchanged: the
+ * per-call `generatedAt` stamp is left out (callers keep it in message
+ * metadata) and `hash` covers exactly the bytes sent.
+ */
+export function chatContextPayload<T extends { generatedAt: string }>(context: T): { json: string; hash: string } {
+  const json = JSON.stringify({ ...context, generatedAt: undefined })
+  return { json, hash: createHash('sha1').update(json).digest('hex').slice(0, 12) }
 }
