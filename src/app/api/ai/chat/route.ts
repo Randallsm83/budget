@@ -103,12 +103,16 @@ export async function POST(req: NextRequest) {
     }
 
     const metadata = { month, contextHash, contextGeneratedAt: context.generatedAt }
-    // Explicit timestamps: a multi-row insert would give both rows the same
-    // now(), leaving the pair's order ambiguous when history is replayed. The
-    // assistant row is forced strictly later, even if the clock stepped back.
+    // Both rows are stamped from one clock reading taken at insert time, the
+    // assistant row 1 ms after its user row. A multi-row insert would otherwise
+    // give both the same now(), and request-start stamps would interleave
+    // overlapping requests (U1, U2, A1, A2) so replay pairs U2 with A1.
+    // ponytail: two overlapping requests that insert within the same ms can still
+    // interleave; add a pair id to metadata if double-submits ever matter.
+    const at = Date.now()
     await db.insert(aiMessages).values([
-      { conversationId, userId, role: 'user', content: message, metadata, createdAt: new Date(started) },
-      { conversationId, userId, role: 'assistant', content: responseText, metadata, createdAt: new Date(Math.max(Date.now(), started + 1)) },
+      { conversationId, userId, role: 'user', content: message, metadata, createdAt: new Date(at) },
+      { conversationId, userId, role: 'assistant', content: responseText, metadata, createdAt: new Date(at + 1) },
     ])
 
     await db.insert(aiAuditEvents).values({
