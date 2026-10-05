@@ -153,12 +153,12 @@ export async function syncTransactions(connection: SyncConnection): Promise<Sync
       const current = plaidAcc.balances.current ?? 0
       const isDebt = plaidAcc.type === 'credit' || plaidAcc.type === 'loan'
       const bal = isDebt ? -Math.round(current * 1000) : Math.round(current * 1000)
-      await db.update(accounts).set({ balance: bal, clearedBalance: bal, updatedAt: new Date() }).where(eq(accounts.id, accountId))
+      await db.update(accounts).set({ balance: bal, clearedBalance: bal, updatedAt: new Date() }).where(and(eq(accounts.id, accountId), eq(accounts.userId, userId)))
     }
   } catch {
     const [row] = await db.select({ total: sql<number>`coalesce(sum(${transactions.amount}), 0)` })
-      .from(transactions).where(eq(transactions.accountId, accountId as string))
-    if (row) await db.update(accounts).set({ balance: row.total, clearedBalance: row.total, updatedAt: new Date() }).where(eq(accounts.id, accountId as string))
+      .from(transactions).where(and(eq(transactions.accountId, accountId as string), eq(transactions.userId, userId)))
+    if (row) await db.update(accounts).set({ balance: row.total, clearedBalance: row.total, updatedAt: new Date() }).where(and(eq(accounts.id, accountId as string), eq(accounts.userId, userId)))
   }
 
   if (connection.plaidItemId) {

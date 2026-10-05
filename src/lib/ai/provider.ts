@@ -1,20 +1,26 @@
 import { applySafetyPostProcessing } from '@/lib/ai/guards'
 
-const OPENAI_API_URL = 'https://api.openai.com/v1/chat/completions'
-const ANTHROPIC_API_URL = 'https://api.anthropic.com/v1/messages'
+// Optional Caveman gateway (LLM spend metering). Unset → providers directly.
+const caveGateway = process.env.CAVE_GATEWAY_URL?.replace(/\/+$/, '')
+const OPENAI_API_URL = caveGateway
+  ? `${caveGateway}/w/budget/v1/chat/completions`
+  : 'https://api.openai.com/v1/chat/completions'
+const ANTHROPIC_API_URL = caveGateway
+  ? `${caveGateway}/w/budget/v1/messages`
+  : 'https://api.anthropic.com/v1/messages'
+// Record only: forward bytes unchanged even if the gateway runs a compression mode.
+// x-cave-workflow groups gateway spend by the job that made the call.
+function caveHeaders(workflow: string): Record<string, string> {
+  return caveGateway
+    ? { 'x-cave-transforms': 'caveman.pass-through.v1', 'x-cave-workflow': workflow }
+    : {}
+}
 
-// Default token budgets. Keep one-shot routes (insights/debt-plan) tight
-// because they return structured JSON; chat needs more headroom for prose
-// answers that cite multiple categories.
-const DEFAULT_MAX_TOKENS_ONE_SHOT = 800
-const DEFAULT_MAX_TOKENS_CHAT = 1500
+// Chat needs more headroom than the one-shot routes (800): prose answers
+// cite multiple categories and were truncating at 800.
+const CHAT_MAX_TOKENS = 1500
 
 export type ChatTurn = { role: 'user' | 'assistant'; content: string }
-
-export type GenerateOptions = {
-  maxTokens?: number
-  temperature?: number
-}
 
 function requireEnv(name: string): string {
   const value = process.env[name]
@@ -22,14 +28,8 @@ function requireEnv(name: string): string {
   return value
 }
 
-export async function generateText(
-  system: string,
-  user: string,
-  opts: GenerateOptions = {},
-): Promise<string> {
-  const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS_ONE_SHOT
-  const temperature = opts.temperature ?? 0.2
-
+/** `workflow`: Caveman workflow slug for the calling job (lowercase [a-z0-9_-]). */
+export async function generateText(system: string, user: string, workflow: string): Promise<string> {
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY
   if (anthropicApiKey) {
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-3-5-sonnet-20241022'
@@ -39,11 +39,12 @@ export async function generateText(
         'Content-Type': 'application/json',
         'x-api-key': anthropicApiKey,
         'anthropic-version': '2023-06-01',
+        ...caveHeaders(workflow),
       },
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
-        temperature,
+        max_tokens: 800,
+        temperature: 0.2,
         system,
         messages: [
           { role: 'user', content: user },
@@ -75,11 +76,11 @@ export async function generateText(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      ...caveHeaders(workflow),
     },
     body: JSON.stringify({
       model,
-      temperature,
-      max_tokens: maxTokens,
+      temperature: 0.2,
       messages: [
         { role: 'system', content: system },
         { role: 'user', content: user },
@@ -108,17 +109,16 @@ export async function generateText(
  *
  * `history` MUST be ordered oldest-first and end just before the new user
  * message. The new user message is appended internally.
+ *
+ * `workflow`: Caveman workflow slug for the calling job (lowercase [a-z0-9_-]).
  */
 export async function generateChat(
   system: string,
   contextJson: string,
   history: ChatTurn[],
   userMessage: string,
-  opts: GenerateOptions = {},
+  workflow: string,
 ): Promise<string> {
-  const maxTokens = opts.maxTokens ?? DEFAULT_MAX_TOKENS_CHAT
-  const temperature = opts.temperature ?? 0.2
-
   const anthropicApiKey = process.env.ANTHROPIC_API_KEY
   if (anthropicApiKey) {
     const model = process.env.ANTHROPIC_MODEL ?? 'claude-3-5-sonnet-20241022'
@@ -156,11 +156,12 @@ export async function generateChat(
         'Content-Type': 'application/json',
         'x-api-key': anthropicApiKey,
         'anthropic-version': '2023-06-01',
+        ...caveHeaders(workflow),
       },
       body: JSON.stringify({
         model,
-        max_tokens: maxTokens,
-        temperature,
+        max_tokens: CHAT_MAX_TOKENS,
+        temperature: 0.2,
         system: systemBlocks,
         messages,
       }),
@@ -201,11 +202,12 @@ export async function generateChat(
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
+      ...caveHeaders(workflow),
     },
     body: JSON.stringify({
       model,
-      temperature,
-      max_tokens: maxTokens,
+      temperature: 0.2,
+      max_tokens: CHAT_MAX_TOKENS,
       messages,
     }),
   })

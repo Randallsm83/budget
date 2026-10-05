@@ -69,6 +69,22 @@ export function parseMoney(value: string): number {
   return Math.round(dollars * 1000)
 }
 
+/** True for a 'YYYY-MM' string whose month is 01–12. Rejects non-strings (RegExp.test would coerce them). */
+export function isValidMonth(month: unknown): month is string {
+  return typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
+}
+
+/**
+ * Like parseMoney, but returns null unless the whole string is one valid amount
+ * ("abc", "12..3x", "$", "1$2", "1,00"). Blank input is an explicit clear and returns 0.
+ */
+export function parseMoneyStrict(value: string): number | null {
+  const trimmed = value.trim()
+  if (trimmed === '') return 0
+  const valid = /^(?:-\$?|\$-?)?(?:(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d*)?|\.\d+)$/.test(trimmed)
+  return valid ? parseMoney(trimmed) : null
+}
+
 /** Get the first day of the next month as 'YYYY-MM-DD'. */
 export function firstDayOfNextMonth(month: string): string {
   const [y, m] = month.split('-').map(Number)

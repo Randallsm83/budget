@@ -4,7 +4,7 @@ import { auth } from '@/auth'
 import { plaidClient } from '@/lib/plaid'
 import { encrypt } from '@/lib/crypto'
 import { db } from '@/db'
-import { importConnections } from '@/db/schema'
+import { accounts, importConnections } from '@/db/schema'
 import { syncTransactions } from '@/lib/plaid-sync'
 import { plaidLog, extractPlaidError } from '@/lib/plaid-logger'
 
@@ -14,6 +14,16 @@ export async function POST(req: NextRequest) {
 
   const { public_token, accountId, institutionId } =
     (await req.json()) as { public_token: string; accountId: string; institutionId?: string }
+
+  // Ownership check. accountId is caller-supplied, and the upsert lookup below is
+  // pre-filtered by userId, so it is a dedup check and cannot reject a foreign id:
+  // a miss falls through to the INSERT and would pair this user with someone else's
+  // account. Runs before itemPublicTokenExchange so a rejected request never creates
+  // a billable Plaid Item. Mirrors enrich/route.ts.
+  const account = await db.query.accounts.findFirst({
+    where: and(eq(accounts.id, accountId), eq(accounts.userId, session.user.id)),
+  })
+  if (!account) return NextResponse.json({ error: 'Account not found' }, { status: 404 })
 
   let response
   try {

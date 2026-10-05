@@ -7,6 +7,7 @@ import { aiAuditEvents, aiConversations, aiMessages } from '@/db/schema'
 import { buildMonthlyContext } from '@/lib/ai/context'
 import { generateChat, type ChatTurn } from '@/lib/ai/provider'
 import { systemPrompt } from '@/lib/ai/prompts'
+import { isValidMonth } from '@/lib/budget'
 import { appLog } from '@/lib/logger'
 
 // Cap how many prior turns we feed back to the model. Anthropic prompt
@@ -23,10 +24,10 @@ export async function POST(req: NextRequest) {
 
   const body = await req.json().catch(() => null) as { message?: string; month?: string; conversationId?: string } | null
   const message = body?.message?.trim()
-  const month = body?.month?.trim()
+  const month = typeof body?.month === 'string' ? body.month.trim() : ''
   const incomingConversationId = body?.conversationId
   if (!message) return NextResponse.json({ error: 'message is required' }, { status: 400 })
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
+  if (!isValidMonth(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
 
   const started = Date.now()
   const model = process.env.ANTHROPIC_MODEL ?? process.env.OPENAI_MODEL ?? 'unknown'
@@ -101,7 +102,7 @@ export async function POST(req: NextRequest) {
       metadata: { month, contextHash, contextGeneratedAt: context.generatedAt },
     })
 
-    const responseText = await generateChat(systemPrompt(), contextJson, history, message)
+    const responseText = await generateChat(systemPrompt(), contextJson, history, message, 'budget-chat')
 
     await db.insert(aiMessages).values({
       conversationId,
@@ -140,6 +141,6 @@ export async function POST(req: NextRequest) {
     } catch {
       // never let audit failure mask the original error
     }
-    return NextResponse.json({ error: errMessage }, { status: 500 })
+    return NextResponse.json({ error: 'AI chat failed' }, { status: 500 })
   }
 }

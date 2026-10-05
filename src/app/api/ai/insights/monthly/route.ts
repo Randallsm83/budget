@@ -7,6 +7,7 @@ import { generateText } from '@/lib/ai/provider'
 import { insightsPrompt, systemPrompt } from '@/lib/ai/prompts'
 import { safeJsonParse } from '@/lib/ai/guards'
 import { InsightSchema } from '@/lib/ai/types'
+import { isValidMonth } from '@/lib/budget'
 import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
@@ -15,13 +16,13 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   const body = await req.json().catch(() => null) as { month?: string } | null
-  const month = body?.month?.trim()
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
+  const month = typeof body?.month === 'string' ? body.month.trim() : ''
+  if (!isValidMonth(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
 
   try {
     const started = Date.now()
     const context = await buildMonthlyContext(userId, month)
-    const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)))
+    const raw = await generateText(systemPrompt(), insightsPrompt(JSON.stringify(context)), 'monthly-insights')
     const parsed = safeJsonParse<unknown[]>(raw, [])
 
     const insights = parsed
@@ -51,6 +52,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ insights })
   } catch (e) {
     appLog('error', '/api/ai/insights/monthly', e instanceof Error ? e.message : 'AI insights failed', { userId, metadata: { month } })
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'AI insights failed' }, { status: 500 })
+    return NextResponse.json({ error: 'AI insights failed' }, { status: 500 })
   }
 }

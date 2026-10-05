@@ -11,7 +11,7 @@ export async function POST() {
   try {
     const response = await plaidClient.linkTokenCreate({
       user: { client_user_id: session.user.id },
-      client_name: 'Coffer',
+      client_name: 'Budget',
       products: [Products.Transactions],
       // additional_consented_products: user consents during Link, but Plaid only bills
       // when the endpoint is first called — not on item creation. This avoids charging

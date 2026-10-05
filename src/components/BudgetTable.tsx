@@ -2,10 +2,10 @@
 
 import { useTransition, useState, useRef, useEffect } from 'react'
 import { setBudgeted } from '@/lib/actions'
-import { formatMoney, parseMoney, getBankBrand } from '@/lib/budget'
+import { formatMoney, parseMoneyStrict, getBankBrand } from '@/lib/budget'
 import Link from 'next/link'
 
-/** Spent amount — links to the transactions page for that category + month. */
+/** Activity amount — links to the transactions page for that category + month. */
 function ActivityLink({ value, categoryId, month, className = '' }: {
   value: number; categoryId: string; month: string; className?: string
 }) {
@@ -54,29 +54,43 @@ function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-
   const [inputVal, setInputVal] = useState('')
   const [isPending, startTransition] = useTransition()
   const [savedFlash, setSavedFlash] = useState(false)
-  const wasP = useRef(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (editing) inputRef.current?.select() }, [editing])
 
   useEffect(() => {
-    if (wasP.current && !isPending) {
-      setSavedFlash(true)
-      const t = setTimeout(() => setSavedFlash(false), 800)
-      return () => clearTimeout(t)
-    }
-    wasP.current = isPending
-  }, [isPending])
+    if (!savedFlash) return
+    const t = setTimeout(() => setSavedFlash(false), 800)
+    return () => clearTimeout(t)
+  }, [savedFlash])
+
+  function save(amount: number) {
+    setError(null)
+    setSavedFlash(false)
+    startTransition(async () => {
+      try {
+        await setBudgeted(categoryId, month, amount)
+        setSavedFlash(true)
+      } catch {
+        setError('Save failed — amount unchanged')
+      }
+    })
+  }
 
   function commit() {
-    const amount = parseMoney(inputVal)
     setEditing(false)
-    startTransition(() => setBudgeted(categoryId, month, amount))
+    const amount = parseMoneyStrict(inputVal)
+    if (amount === null) {
+      setError(`Invalid amount "${inputVal}" — not saved`)
+      return
+    }
+    save(amount)
   }
 
   function applySuggestion() {
     if (!suggested) return
-    startTransition(() => setBudgeted(categoryId, month, suggested))
+    save(suggested)
   }
 
   if (editing) {
@@ -94,12 +108,13 @@ function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-
   return (
     <div className="flex flex-col items-end gap-0.5">
       <button
-        onClick={() => { setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
+        onClick={() => { setError(null); setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
         disabled={isPending}
-        className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
+        className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${error ? ' ring-1 ring-[#ce6f8f]' : savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
       >
         {formatMoney(value)}
       </button>
+      {error && <span role="alert" className="text-[10px] text-[#ce6f8f]">{error}</span>}
       {value === 0 && suggested && suggested > 0 && (
         <button
           onClick={applySuggestion}
@@ -170,7 +185,7 @@ function CategoryItemRow({ cat, month, rta }: {
           <span className="text-[10px] text-[#8a8fad] shrink-0">Assigned</span>
           <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} className="w-20 text-right text-xs" />
           <span className="text-[#3a3b58] shrink-0">·</span>
-          <span className="text-[10px] text-[#8a8fad] shrink-0">Spent</span>
+          <span className="text-[10px] text-[#8a8fad] shrink-0">Activity</span>
           <Amount value={cat.activity} className="text-xs" />
           <div className="ml-auto flex items-center gap-1.5 shrink-0">
             {showCover && <CoverButton categoryId={cat.id} month={month} budgeted={cat.budgeted} balance={cat.balance} rta={rta} />}
@@ -251,7 +266,7 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
       <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5
                       bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
         <span>💳 Credit Card Payments</span>
-        <span className="text-right pr-2" title="CC spending this month — auto-set-aside for payment">Spent</span>
+        <span className="text-right pr-2" title="Card spending moved into the card payment category this month; refunds reduce it">Funded</span>
         <span className="text-right pr-2">Payments</span>
         <span className="text-right">Card Balance</span>
       </div>
@@ -321,7 +336,7 @@ export function BudgetTable({ month, groups, rta }: { month: string; groups: Gro
         )}
         {expenseGroups.length > 0 && (
           <>
-            {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Assigned', 'Spent', 'Balance'])}
+            {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Assigned', 'Activity', 'Available'])}
             {expenseGroups.map((g) => <GroupSection key={g.id} group={g} month={month} rta={rta} />)}
           </>
         )}
