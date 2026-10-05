@@ -27,6 +27,7 @@ _Avoid_: RTA (in prose), unassigned
 **Card payment category**:
 The category that holds money set aside to pay one credit card's bill; spending on that card moves money into it.
 _Avoid_: CC Payment bucket, reserved
+_Current implementation_: the card payment row shows the card's current Balance and is not subtracted from Ready to Assign, until [ADR-0001](docs/adr/0001-ready-to-assign-anchored-on-cash.md) lands ([#99](https://github.com/Randallsm83/budget/issues/99)).
 
 **Funded**:
 The card spending that moves into a card payment category in one month; refunds on the card reduce it.
@@ -39,6 +40,7 @@ _Avoid_: budget account
 **Liquid cash**:
 The combined Balance of on-budget checking, savings and cash accounts at the end of a month.
 _Avoid_: cash on hand
+_Current implementation_: today's Balance is used for every month, until [ADR-0001](docs/adr/0001-ready-to-assign-anchored-on-cash.md) lands ([#99](https://github.com/Randallsm83/budget/issues/99)).
 
 **Pace**:
 The share of a month that has elapsed; a finished month is at full pace.
