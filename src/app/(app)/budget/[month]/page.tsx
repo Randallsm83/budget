@@ -1,4 +1,5 @@
 import { unstable_noStore as noStore } from 'next/cache'
+import { notFound } from 'next/navigation'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, transactions, monthBudgets, categoryGroups, categories } from '@/db/schema'
@@ -11,6 +12,7 @@ import { BudgetCoachSection } from '@/components/BudgetCoachSection'
 import { ensureCCPaymentCategories } from '@/lib/actions'
 import {
   firstDayOfNextMonth,
+  isValidMonth,
   prevMonth,
   nextMonth,
   formatMonthDisplay,
@@ -20,22 +22,11 @@ interface Props {
   params: Promise<{ month: string }>
 }
 
-// Validate 'YYYY-MM' format
-function isValidMonth(m: string) {
-  return /^\d{4}-(0[1-9]|1[0-2])$/.test(m)
-}
-
 export default async function BudgetPage({ params }: Props) {
   noStore()
   const { month } = await params
 
-  if (!isValidMonth(month)) {
-    return (
-      <div className="p-8 text-[#ce6f8f]">
-        Invalid month format. Expected YYYY-MM (e.g. 2026-03).
-      </div>
-    )
-  }
+  if (!isValidMonth(month)) notFound()
 
   const session = await auth()
   const userId = session!.user.id

@@ -27,3 +27,21 @@ export function normalizePayee(name: string): string {
     .replace(/\s+/g, ' ')
     .trim()
 }
+
+/**
+ * Display-only title-casing for ALL-CAPS bank payee strings. Mixed-case
+ * payees are returned unchanged; the stored value is never modified.
+ *
+ * Examples:
+ *   "BKOFAMERICA ATM WITHDRWL" → "Bkofamerica Atm Withdrwl"
+ *   "MCDONALD'S"               → "Mcdonald's"
+ *   "Whole Foods"              → "Whole Foods"
+ */
+export function displayPayee(payee: string | null): string {
+  if (!payee) return ''
+  if (payee === payee.toUpperCase() && /[A-Z]/.test(payee)) {
+    // The lookbehind keeps the letter after an apostrophe lower case ("Mcdonald's").
+    return payee.toLowerCase().replace(/(?<!['’])\b\w/g, (c) => c.toUpperCase())
+  }
+  return payee
+}

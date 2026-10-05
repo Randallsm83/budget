@@ -3,7 +3,7 @@ import { and, desc, eq, gte, lt } from 'drizzle-orm'
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { transactions } from '@/db/schema'
-import { firstDayOfNextMonth } from '@/lib/budget'
+import { firstDayOfNextMonth, isValidMonth } from '@/lib/budget'
 
 export async function GET(req: Request) {
   const session = await auth()
@@ -12,6 +12,9 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const accountId = searchParams.get('accountId')
   const month = searchParams.get('month') // 'YYYY-MM'
+  if (month !== null && !isValidMonth(month)) {
+    return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
+  }
 
   const conditions = [eq(transactions.userId, session.user.id)]
   if (accountId) conditions.push(eq(transactions.accountId, accountId))

@@ -2,9 +2,11 @@ import { describe, it, expect } from 'vitest'
 import {
   formatMoney,
   parseMoney,
+  parseMoneyStrict,
   prevMonth,
   nextMonth,
   firstDayOfNextMonth,
+  isValidMonth,
   formatMonthDisplay,
   computeCategoryBalance,
   computeReadyToAssign,
@@ -52,6 +54,54 @@ describe('parseMoney', () => {
     expect(parseMoney('')).toBe(0)
     expect(parseMoney('-')).toBe(0)
     expect(parseMoney('abc')).toBe(0)
+  })
+})
+
+describe('isValidMonth', () => {
+  it('accepts YYYY-MM with month 01–12', () => {
+    expect(isValidMonth('2026-01')).toBe(true)
+    expect(isValidMonth('2026-12')).toBe(true)
+  })
+
+  it('rejects out-of-range months and malformed input', () => {
+    for (const m of ['2026-00', '2026-13', '2026-99', 'abcd-ef', '2026-1', '', '2026-01-01', ' 2026-01']) {
+      expect(isValidMonth(m), m).toBe(false)
+    }
+  })
+
+  it('rejects non-strings, even ones that stringify to a valid month', () => {
+    for (const m of [['2026-01'], 202601, null, undefined, { toString: () => '2026-01' }]) {
+      expect(isValidMonth(m), String(m)).toBe(false)
+    }
+  })
+})
+
+describe('parseMoneyStrict', () => {
+  it('treats blank input as an explicit clear to 0', () => {
+    expect(parseMoneyStrict('')).toBe(0)
+    expect(parseMoneyStrict('   ')).toBe(0)
+  })
+
+  it('parses valid amounts to the same milliunits as parseMoney', () => {
+    expect(parseMoneyStrict('12.34')).toBe(12340)
+    expect(parseMoneyStrict('-5')).toBe(-5000)
+    expect(parseMoneyStrict('$1,000.50')).toBe(1000500)
+    expect(parseMoneyStrict('-$12.99')).toBe(-12990)
+    expect(parseMoneyStrict(' .5 ')).toBe(500)
+  })
+
+  it('rejects wholly invalid input', () => {
+    expect(parseMoneyStrict('abc')).toBeNull()
+    expect(parseMoneyStrict('-')).toBeNull()
+    expect(parseMoneyStrict('$')).toBeNull()
+    expect(parseMoneyStrict(',,,')).toBeNull()
+  })
+
+  it('rejects input with only a valid prefix or misplaced symbols', () => {
+    expect(parseMoneyStrict('12..3x')).toBeNull()
+    expect(parseMoneyStrict('1$2')).toBeNull()
+    expect(parseMoneyStrict('1,00')).toBeNull()
+    expect(parseMoneyStrict('--5')).toBeNull()
   })
 })
 

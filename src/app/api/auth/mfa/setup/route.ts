@@ -12,7 +12,7 @@ export async function POST() {
   const secret = new OTPAuth.Secret()
   const secretBase32 = secret.base32
   const totp = new OTPAuth.TOTP({
-    issuer: 'Coffer',
+    issuer: 'Budget',
     label: session.user.email ?? session.user.id,
     secret,
   })

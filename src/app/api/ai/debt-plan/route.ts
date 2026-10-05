@@ -7,6 +7,7 @@ import { generateText } from '@/lib/ai/provider'
 import { debtPlanPrompt, systemPrompt } from '@/lib/ai/prompts'
 import { safeJsonParse } from '@/lib/ai/guards'
 import { DebtPlanSchema } from '@/lib/ai/types'
+import { isValidMonth } from '@/lib/budget'
 import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
@@ -15,10 +16,10 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   const body = await req.json().catch(() => null) as { month?: string; method?: 'snowball' | 'avalanche'; monthlyPayment?: number } | null
-  const month = body?.month?.trim()
+  const month = typeof body?.month === 'string' ? body.month.trim() : ''
   const method = body?.method ?? 'avalanche'
   const monthlyPayment = Number(body?.monthlyPayment ?? 0)
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
+  if (!isValidMonth(month)) return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
   if (!Number.isFinite(monthlyPayment) || monthlyPayment < 0) return NextResponse.json({ error: 'monthlyPayment must be >= 0 milliunits' }, { status: 400 })
 
   try {
@@ -58,6 +59,6 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ plan: parsed.data })
   } catch (e) {
     appLog('error', '/api/ai/debt-plan', e instanceof Error ? e.message : 'AI debt plan failed', { userId, metadata: { month, method } })
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'AI debt plan failed' }, { status: 500 })
+    return NextResponse.json({ error: 'AI debt plan failed' }, { status: 500 })
   }
 }
