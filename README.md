@@ -105,22 +105,28 @@ If you want to use bank sync, the following must be completed before going to pr
 
 **Resetting a forgotten password**
 
-There is no self-service password reset UI — this is an invite-only app. To reset a password manually:
+There is no self-service password reset UI — this is an invite-only app. `npm run db:seed` will not help: it skips any user whose email already exists. Reset the password manually instead:
 
-```bash
-# Option 1: re-seed (overwrites the existing user record)
-npm run db:seed
+1. Generate a bcrypt hash of the new password (run from the repo root, after `npm install`):
 
-# Option 2: update directly via Drizzle Studio
-npm run db:studio
-# → open the `users` table, find the row, update `password` to a new bcrypt hash
-```
+   ```bash
+   node -e "const b = require('bcryptjs'); b.hash('newpassword', 12).then(console.log)"
+   ```
 
-To generate a bcrypt hash outside the app:
+2. Store it in the user's `password_hash` column, either in Drizzle Studio:
 
-```bash
-node -e "const b = require('bcryptjs'); b.hash('newpassword', 12).then(console.log)"
-```
+   ```bash
+   npm run db:studio
+   # → open the `users` table, find the row, paste the hash into `password_hash`
+   ```
+
+   or with SQL against the database:
+
+   ```sql
+   UPDATE users SET password_hash = '<hash from step 1>' WHERE email = 'you@example.com';
+   ```
+
+3. Sign in with the new password.
 
 **Disabling MFA**
 
