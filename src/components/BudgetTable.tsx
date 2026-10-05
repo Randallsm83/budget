@@ -5,7 +5,7 @@ import { setBudgeted } from '@/lib/actions'
 import { formatMoney, parseMoneyStrict, getBankBrand } from '@/lib/budget'
 import Link from 'next/link'
 
-/** Spent amount — links to the transactions page for that category + month. */
+/** Activity amount — links to the transactions page for that category + month. */
 function ActivityLink({ value, categoryId, month, className = '' }: {
   value: number; categoryId: string; month: string; className?: string
 }) {
@@ -185,7 +185,7 @@ function CategoryItemRow({ cat, month, rta }: {
           <span className="text-[10px] text-[#8a8fad] shrink-0">Assigned</span>
           <EditableBudgeted categoryId={cat.id} month={month} value={cat.budgeted} suggested={cat.suggested} className="w-20 text-right text-xs" />
           <span className="text-[#3a3b58] shrink-0">·</span>
-          <span className="text-[10px] text-[#8a8fad] shrink-0">Spent</span>
+          <span className="text-[10px] text-[#8a8fad] shrink-0">Activity</span>
           <Amount value={cat.activity} className="text-xs" />
           <div className="ml-auto flex items-center gap-1.5 shrink-0">
             {showCover && <CoverButton categoryId={cat.id} month={month} budgeted={cat.budgeted} balance={cat.balance} rta={rta} />}
@@ -266,7 +266,7 @@ function CCPaymentSection({ groups }: { groups: GroupRow[] }) {
       <div className="hidden sm:grid grid-cols-[1fr_7rem_7rem_7rem] px-6 py-1.5
                       bg-[#1a1b2e] border-b border-[#3a3b58] text-[9px] font-bold text-[#42b3c2] uppercase tracking-widest">
         <span>💳 Credit Card Payments</span>
-        <span className="text-right pr-2" title="CC spending this month — auto-set-aside for payment">Spent</span>
+        <span className="text-right pr-2" title="Card spending moved into the card payment category this month; refunds reduce it">Funded</span>
         <span className="text-right pr-2">Payments</span>
         <span className="text-right">Card Balance</span>
       </div>
@@ -336,7 +336,7 @@ export function BudgetTable({ month, groups, rta }: { month: string; groups: Gro
         )}
         {expenseGroups.length > 0 && (
           <>
-            {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Assigned', 'Spent', 'Balance'])}
+            {sectionLabel('💸 Expenses', 'text-[#8a8fad]', ['Assigned', 'Activity', 'Available'])}
             {expenseGroups.map((g) => <GroupSection key={g.id} group={g} month={month} rta={rta} />)}
           </>
         )}
