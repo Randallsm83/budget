@@ -3,7 +3,7 @@ import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, transactions, monthBudgets, categories, categoryGroups } from '@/db/schema'
 import { and, eq, gte, lt, inArray } from 'drizzle-orm'
-import { firstDayOfNextMonth } from '@/lib/budget'
+import { firstDayOfNextMonth, isValidMonth } from '@/lib/budget'
 import { appLog } from '@/lib/logger'
 
 export async function POST(req: NextRequest) {
@@ -12,8 +12,8 @@ export async function POST(req: NextRequest) {
   const userId = session.user.id
 
   const body = await req.json().catch(() => null) as { month?: string } | null
-  const month = body?.month?.trim()
-  if (!month || !/^\d{4}-\d{2}$/.test(month)) {
+  const month = typeof body?.month === 'string' ? body.month.trim() : ''
+  if (!isValidMonth(month)) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
   }
 
@@ -126,6 +126,6 @@ export async function POST(req: NextRequest) {
   })
   } catch (e) {
     appLog('error', '/api/ai/forecast', e instanceof Error ? e.message : 'Forecast failed', { userId, metadata: { month } })
-    return NextResponse.json({ error: e instanceof Error ? e.message : 'Forecast failed' }, { status: 500 })
+    return NextResponse.json({ error: 'Forecast failed' }, { status: 500 })
   }
 }

@@ -5,6 +5,7 @@ import { and, asc, eq, inArray, isNull, isNotNull, max, count, sql } from 'drizz
 import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, categories, categoryGroups, importConnections, investmentHoldings, liabilityDetails, monthBudgets, transactions, payeeRules, users } from '@/db/schema'
+import { isValidMonth } from '@/lib/budget'
 import { normalizePayee } from '@/lib/payee'
 import { removeItem } from '@/lib/plaid-item'
 import { TRANSFER_RE } from '@/lib/plaid-sync'
@@ -1126,7 +1127,7 @@ export async function recategorizePayee(
 export async function setBudgeted(categoryId: string, month: string, amountMilliunits: number) {
   const userId = await requireUser()
 
-  if (!/^\d{4}-\d{2}$/.test(month)) throw new Error('Invalid month format')
+  if (!isValidMonth(month)) throw new Error('Invalid month format')
 
   // Verify category belongs to user
   const cat = await db.query.categories.findFirst({
