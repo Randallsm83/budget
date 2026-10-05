@@ -12,7 +12,7 @@ export async function GET(req: Request) {
   const { searchParams } = new URL(req.url)
   const accountId = searchParams.get('accountId')
   const month = searchParams.get('month') // 'YYYY-MM'
-  if (month && !isValidMonth(month)) {
+  if (month !== null && !isValidMonth(month)) {
     return NextResponse.json({ error: 'month must be YYYY-MM' }, { status: 400 })
   }
 

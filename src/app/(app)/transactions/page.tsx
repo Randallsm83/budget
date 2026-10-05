@@ -18,7 +18,7 @@ export default async function TransactionsPage({ searchParams }: Props) {
   const session = await auth()
   const userId = session!.user.id
   const { category, month, account } = await searchParams
-  if (month && !isValidMonth(month)) notFound()
+  if (month !== undefined && !isValidMonth(month)) notFound()
 
   // Build WHERE conditions
   const conditions = [eq(transactions.userId, userId)]
