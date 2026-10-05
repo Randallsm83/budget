@@ -54,7 +54,7 @@ Copy `.env.local.example` to `.env.local` and fill in:
   - `plaid-logger.ts` — structured backend logging; every Plaid API call logs `request_id` for support
   - `plaid-analytics.ts` — frontend Link conversion logging via `onEvent`/`onExit` callbacks
   - `crypto.ts` — AES-256-GCM encrypt/decrypt for Plaid tokens and MFA secrets
-  - `payee.ts` — payee name normalization for auto-categorization
+  - `payee.ts` — `normalizePayee()` rule keys for auto-categorization; `displayPayee()` display-only title-casing of ALL-CAPS payees (use it wherever a payee is shown; never store its output)
 - `src/components/`
   - `PlaidLink.tsx` — initial bank connection; shows `PlaidConsentModal` before opening Link
   - `PlaidRelink.tsx` — update mode re-authentication for `ITEM_LOGIN_REQUIRED` / expired connections

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { updateTransactionCategory, deleteTransaction, toggleTransfer } from '@/lib/actions'
 import { formatMoney } from '@/lib/budget'
+import { displayPayee } from '@/lib/payee'
 
 interface Txn {
   id: string
@@ -113,7 +114,7 @@ function TxnRow({ txn, allCategories, onDeleted }: {
 
       {/* Payee + account */}
       <div className="min-w-0">
-        <p className="text-[#ecf0f1] truncate">{txn.payee || '—'}</p>
+        <p className="text-[#ecf0f1] truncate">{displayPayee(txn.payee) || '—'}</p>
         <Link
           href={`/accounts/${txn.accountId}`}
           className="text-[10px] text-[#5a5b78] hover:text-[#b3a1e6] transition-colors truncate block"
