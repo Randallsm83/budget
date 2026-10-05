@@ -73,7 +73,7 @@ Copy `.env.local.example` to `.env.local` and fill in:
 ## Critical patterns
 
 ### Money is always integer milliunits
-`$1.00 = 1000`. All DB columns, Server Actions, and math use milliunits. **Never use floats for money.** Use `formatMoney(milliunits)` from `src/lib/budget.ts` for display and `parseMoney(str)` to parse user input.
+`$1.00 = 1000`. All DB columns, Server Actions, and math use milliunits. **Never use floats for money.** Use `formatMoney(milliunits)` from `src/lib/budget.ts` for display and `parseMoney(str)` to parse user input. Where a typo must not save a wrong amount (e.g. the Assigned editor), use `parseMoneyStrict(str)`: it returns `null` for anything that isn't a whole amount, and `0` for blank input.
 
 ### Server Actions for all mutations
 All data mutations go through `'use server'` functions in `src/lib/actions.ts`. Every action calls `requireUser()` first, then verifies ownership with `userId` in every query. Page components call Server Actions directly; there is no separate REST layer for mutations (except Plaid sync which is an API route).

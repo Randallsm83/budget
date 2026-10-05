@@ -2,7 +2,7 @@
 
 import { useTransition, useState, useRef, useEffect } from 'react'
 import { setBudgeted } from '@/lib/actions'
-import { formatMoney, parseMoney, getBankBrand } from '@/lib/budget'
+import { formatMoney, parseMoneyStrict, getBankBrand } from '@/lib/budget'
 import Link from 'next/link'
 
 /** Spent amount — links to the transactions page for that category + month. */
@@ -54,29 +54,43 @@ function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-
   const [inputVal, setInputVal] = useState('')
   const [isPending, startTransition] = useTransition()
   const [savedFlash, setSavedFlash] = useState(false)
-  const wasP = useRef(false)
+  const [error, setError] = useState<string | null>(null)
   const inputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => { if (editing) inputRef.current?.select() }, [editing])
 
   useEffect(() => {
-    if (wasP.current && !isPending) {
-      setSavedFlash(true)
-      const t = setTimeout(() => setSavedFlash(false), 800)
-      return () => clearTimeout(t)
-    }
-    wasP.current = isPending
-  }, [isPending])
+    if (!savedFlash) return
+    const t = setTimeout(() => setSavedFlash(false), 800)
+    return () => clearTimeout(t)
+  }, [savedFlash])
+
+  function save(amount: number) {
+    setError(null)
+    setSavedFlash(false)
+    startTransition(async () => {
+      try {
+        await setBudgeted(categoryId, month, amount)
+        setSavedFlash(true)
+      } catch {
+        setError('Save failed — amount unchanged')
+      }
+    })
+  }
 
   function commit() {
-    const amount = parseMoney(inputVal)
     setEditing(false)
-    startTransition(() => setBudgeted(categoryId, month, amount))
+    const amount = parseMoneyStrict(inputVal)
+    if (amount === null) {
+      setError(`Invalid amount "${inputVal}" — not saved`)
+      return
+    }
+    save(amount)
   }
 
   function applySuggestion() {
     if (!suggested) return
-    startTransition(() => setBudgeted(categoryId, month, suggested))
+    save(suggested)
   }
 
   if (editing) {
@@ -94,12 +108,13 @@ function EditableBudgeted({ categoryId, month, value, suggested, className = 'w-
   return (
     <div className="flex flex-col items-end gap-0.5">
       <button
-        onClick={() => { setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
+        onClick={() => { setError(null); setInputVal((value / 1000).toFixed(2)); setEditing(true) }}
         disabled={isPending}
-        className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
+        className={`${className} text-right text-sm text-[#ecf0f1] hover:text-[#b3a1e6] px-2 py-0.5 rounded hover:bg-[#2a2b45] transition-colors disabled:opacity-50 tabular-nums cursor-pointer${error ? ' ring-1 ring-[#ce6f8f]' : savedFlash ? ' ring-1 ring-[#5ccc96]' : ''}`}
       >
         {formatMoney(value)}
       </button>
+      {error && <span role="alert" className="text-[10px] text-[#ce6f8f]">{error}</span>}
       {value === 0 && suggested && suggested > 0 && (
         <button
           onClick={applySuggestion}
