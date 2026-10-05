@@ -69,6 +69,11 @@ export function parseMoney(value: string): number {
   return Math.round(dollars * 1000)
 }
 
+/** True for a 'YYYY-MM' string whose month is 01–12. Rejects non-strings (RegExp.test would coerce them). */
+export function isValidMonth(month: unknown): month is string {
+  return typeof month === 'string' && /^\d{4}-(0[1-9]|1[0-2])$/.test(month)
+}
+
 /** Get the first day of the next month as 'YYYY-MM-DD'. */
 export function firstDayOfNextMonth(month: string): string {
   const [y, m] = month.split('-').map(Number)

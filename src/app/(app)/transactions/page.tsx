@@ -2,7 +2,8 @@ import { auth } from '@/auth'
 import { db } from '@/db'
 import { accounts, transactions, categories, categoryGroups } from '@/db/schema'
 import { and, asc, desc, eq, gte, lt } from 'drizzle-orm'
-import { firstDayOfNextMonth } from '@/lib/budget'
+import { notFound } from 'next/navigation'
+import { firstDayOfNextMonth, isValidMonth } from '@/lib/budget'
 import { TransactionsList } from '@/components/TransactionsList'
 
 interface Props {
@@ -17,6 +18,7 @@ export default async function TransactionsPage({ searchParams }: Props) {
   const session = await auth()
   const userId = session!.user.id
   const { category, month, account } = await searchParams
+  if (month && !isValidMonth(month)) notFound()
 
   // Build WHERE conditions
   const conditions = [eq(transactions.userId, userId)]
