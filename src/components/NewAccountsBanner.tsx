@@ -28,7 +28,7 @@ export function NewAccountsBanner({ items }: { items: NewAccountsItem[] }) {
           <div className="flex-1 min-w-0 text-sm">
             <span className="font-medium text-[#42b3c2]">New accounts available</span>
             <span className="text-[#8a8fad]">
-              {' — '}your bank has accounts not yet connected to Coffer. Go to{' '}
+              {' — '}your bank has accounts not yet connected to Budget. Go to{' '}
               <Link href={`/accounts/${item.id}`} className="text-[#42b3c2] hover:underline">
                 {item.name}
               </Link>{' '}

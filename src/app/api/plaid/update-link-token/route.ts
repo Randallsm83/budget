@@ -32,7 +32,7 @@ export async function POST(req: NextRequest) {
     // account_selection_enabled=true opens the account picker so users can share new accounts.
     const res = await plaidClient.linkTokenCreate({
       user: { client_user_id: session.user.id },
-      client_name: 'Coffer',
+      client_name: 'Budget',
       access_token: accessToken,
       country_codes: [CountryCode.Us],
       language: 'en',

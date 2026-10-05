@@ -15,8 +15,8 @@ export function PlaidConsentModal({ onConfirm, onCancel }: Props) {
         <h2 className="text-base font-semibold text-[#ecf0f1]">Connect your bank account</h2>
 
         <p className="text-sm text-[#8a8fad]">
-          Coffer uses <strong className="text-[#ecf0f1]">Plaid</strong> to securely connect to your
-          financial institution. By continuing, you authorise Coffer to access:
+          Budget uses <strong className="text-[#ecf0f1]">Plaid</strong> to securely connect to your
+          financial institution. By continuing, you authorise Budget to access:
         </p>
 
         <ul className="space-y-1.5 text-sm text-[#8a8fad]">
@@ -34,7 +34,7 @@ export function PlaidConsentModal({ onConfirm, onCancel }: Props) {
         </ul>
 
         <div className="bg-[#16172a] border border-[#2a2b45] rounded-lg px-4 py-3 space-y-1.5 text-xs text-[#8a8fad]">
-          <p>🔒 Your credentials are <strong className="text-[#ecf0f1]">never</strong> seen or stored by Coffer — Plaid handles authentication directly.</p>
+          <p>🔒 Your credentials are <strong className="text-[#ecf0f1]">never</strong> seen or stored by Budget — Plaid handles authentication directly.</p>
           <p>🔐 All data retrieved from Plaid is <strong className="text-[#ecf0f1]">encrypted at rest</strong> and never sold or shared with third parties.</p>
           <p>🗑 You can <strong className="text-[#ecf0f1]">disconnect your bank</strong> at any time from the account page.</p>
         </div>
@@ -51,7 +51,7 @@ export function PlaidConsentModal({ onConfirm, onCancel }: Props) {
           </a>
           {process.env.NEXT_PUBLIC_PRIVACY_URL && (
             <>
-              {' '}and Coffer&apos;s{' '}
+              {' '}and Budget&apos;s{' '}
               <a
                 href={process.env.NEXT_PUBLIC_PRIVACY_URL}
                 target="_blank"
