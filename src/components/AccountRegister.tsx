@@ -11,6 +11,7 @@ import { PlaidNewAccounts } from './PlaidNewAccounts'
 import { applyPayeeRules, clearRelinkRequired, clearNewAccountsAvailable, disconnectPlaidConnection, deleteTransaction, recategorizePayee, reapplyTransferDetection, revertIncorrectTransfers, toggleCleared, toggleTransfer, updateAccount, updateTransactionCategory } from '@/lib/actions'
 import { UpdateBalanceModal } from './UpdateBalanceModal'
 import { formatMoney } from '@/lib/budget'
+import { displayPayee } from '@/lib/payee'
 
 interface Transaction {
   id: string
@@ -365,15 +366,6 @@ const TYPE_LABELS: Record<string, string> = {
 const TRACKING_TYPES = new Set(['investment', 'real_estate', 'vehicle', 'loan', 'other'])
 
 const TRANSFER_PAYEE_RE = /^(online transfer|transfer (from|to|between)|ach transfer|wire transfer|book transfer)/i
-
-/** Display-only title-casing for ALL-CAPS bank payee strings. Stored value is unchanged. */
-function displayPayee(payee: string): string {
-  if (!payee) return payee
-  if (payee === payee.toUpperCase() && /[A-Z]/.test(payee)) {
-    return payee.toLowerCase().replace(/\b\w/g, (c) => c.toUpperCase())
-  }
-  return payee
-}
 
 function TransactionRow({
   txn,
@@ -792,7 +784,7 @@ export function AccountRegister({ account, transactions, allAccounts, allCategor
     setRecatPending(true)
     try {
       const result = await recategorizePayee(pendingRecat.payee, pendingRecat.catId)
-      setSyncResult(`${result.updated} transaction${result.updated !== 1 ? 's' : ''} updated for "${pendingRecat.payee}"`)
+      setSyncResult(`${result.updated} transaction${result.updated !== 1 ? 's' : ''} updated for "${displayPayee(pendingRecat.payee)}"`)
       router.refresh()
     } catch (err) {
       console.error('recategorizePayee error:', err)
@@ -1094,7 +1086,7 @@ if (!confirm('Disconnect this bank? Transactions are kept, but syncing will stop
             Apply{' '}
             <strong className="text-[#b3a1e6]">{pendingRecat.catName ?? 'Inflow'}</strong>
             {' '}to all{' '}
-            <strong className="text-[#ecf0f1]">{pendingRecat.payee}</strong>
+            <strong className="text-[#ecf0f1]">{displayPayee(pendingRecat.payee)}</strong>
             {' '}transactions?
           </span>
           <div className="flex items-center gap-2 flex-shrink-0">
