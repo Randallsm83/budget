@@ -104,10 +104,11 @@ export async function POST(req: NextRequest) {
 
     const metadata = { month, contextHash, contextGeneratedAt: context.generatedAt }
     // Explicit timestamps: a multi-row insert would give both rows the same
-    // now(), leaving the pair's order ambiguous when history is replayed.
+    // now(), leaving the pair's order ambiguous when history is replayed. The
+    // assistant row is forced strictly later, even if the clock stepped back.
     await db.insert(aiMessages).values([
       { conversationId, userId, role: 'user', content: message, metadata, createdAt: new Date(started) },
-      { conversationId, userId, role: 'assistant', content: responseText, metadata, createdAt: new Date() },
+      { conversationId, userId, role: 'assistant', content: responseText, metadata, createdAt: new Date(Math.max(Date.now(), started + 1)) },
     ])
 
     await db.insert(aiAuditEvents).values({
