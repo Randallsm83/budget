@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { and, asc, eq, gte, lt, inArray } from 'drizzle-orm'
 import { db } from '@/db'
 import { accounts, monthBudgets, transactions, categories, categoryGroups, liabilityDetails } from '@/db/schema'
@@ -143,16 +144,26 @@ export async function buildMonthlyContext(userId: string, month: string) {
     : []
   const liabilityByAccount = new Map(liabilities.map((l) => [l.accountId, l.details as Record<string, unknown>]))
 
+  // Plaid liability APRs are a list. Prefer purchase_apr; fall back to the
+  // first entry with a positive percentage so we never silently surface a
+  // promotional 0% APR or an unrelated balance_transfer_apr for payoff
+  // prioritisation.
   const debtAccounts = userAccounts
     .filter((a) => a.type === 'credit_card' || a.type === 'loan')
     .map((a) => {
       const details = liabilityByAccount.get(a.id)
+      const aprs = (details?.aprs as Array<{ apr_type?: string; apr_percentage?: number }> | undefined) ?? []
+      const purchaseApr = aprs.find((x) => x.apr_type === 'purchase_apr')?.apr_percentage
+      const positiveApr = aprs.find((x) => typeof x.apr_percentage === 'number' && (x.apr_percentage ?? 0) > 0)?.apr_percentage
+      const aprPercent = typeof purchaseApr === 'number' ? purchaseApr
+        : typeof positiveApr === 'number' ? positiveApr
+        : null
       return {
         name: a.name,
         type: a.type,
         balanceDollars: toDollars(a.balance),
         owedDollars: toDollars(Math.abs(Math.min(0, a.balance))),
-        aprPercent: (details?.aprs as Array<{apr_percentage?: number}> | undefined)?.[0]?.apr_percentage ?? null,
+        aprPercent,
         minimumPaymentDollars: typeof details?.minimum_payment_amount === 'number'
           ? toDollars(details.minimum_payment_amount as number)
           : null,
@@ -164,18 +175,52 @@ export async function buildMonthlyContext(userId: string, month: string) {
     .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
     .map((c) => c.id)
 
-  const historicalAverages: Record<string, { avgSpentDollars: number; monthsUsed: number }> = {}
+  // Track BOTH the active-month average (months where any spend occurred,
+  // legacy behaviour) and the all-month average (treating zero-spend months
+  // as $0). The legacy filter biases averages upward for sporadic
+  // categories; surfacing both lets the model pick the right comparison.
+  const historicalAverages: Record<string, {
+    avgSpentDollarsActive: number
+    avgSpentDollarsAll: number
+    monthsUsedActive: number
+    monthsAvailable: number
+  }> = {}
   for (const catId of expenseCatIds) {
-    const monthlySpends = histMonths
-      .map((m) => histActivity[m]?.[catId] ?? 0)
-      .filter((v) => v > 0)
+    const monthlySpends = histMonths.map((m) => histActivity[m]?.[catId] ?? 0)
     if (monthlySpends.length === 0) continue
-    const avg = monthlySpends.reduce((s, v) => s + v, 0) / monthlySpends.length
-    historicalAverages[catId] = { avgSpentDollars: toDollars(avg), monthsUsed: monthlySpends.length }
+    const active = monthlySpends.filter((v) => v > 0)
+    const avgAll = monthlySpends.reduce((s, v) => s + v, 0) / monthlySpends.length
+    const avgActive = active.length > 0
+      ? active.reduce((s, v) => s + v, 0) / active.length
+      : 0
+    if (avgAll === 0 && avgActive === 0) continue
+    historicalAverages[catId] = {
+      avgSpentDollarsActive: toDollars(avgActive),
+      avgSpentDollarsAll: toDollars(avgAll),
+      monthsUsedActive: active.length,
+      monthsAvailable: monthlySpends.length,
+    }
   }
 
-  // Expense categories: budget vs actual, sorted by overspend first
-  const expenseCategories = categoryRows
+  // Expense categories: budget vs actual. We previously truncated to 20
+  // entries which silently dropped on-track categories for users with
+  // larger budgets. Instead, split into two tiers: full detail for
+  // overspent / at-risk categories (which need attention) and a compact
+  // shape for the rest (which the model can still cite by name).
+  type ExpenseCategoryFull = {
+    name: string
+    groupName: string
+    budgetedDollars: number
+    spentDollars: number
+    remainingDollars: number
+    projectedMonthEndDollars: number
+    historicalAvgDollarsActive: number | null
+    historicalAvgDollarsAll: number | null
+    historicalMonthsActive: number
+    historicalMonthsAvailable: number
+  }
+
+  const expenseCategoriesAll: ExpenseCategoryFull[] = categoryRows
     .filter((c) => !c.isIncome && !c.isTransfer && !c.isSystem)
     .map((c) => {
       const budgetedMu = budgetMap.get(c.id) ?? 0
@@ -194,13 +239,16 @@ export async function buildMonthlyContext(userId: string, month: string) {
         spentDollars: toDollars(spentMu),
         remainingDollars: toDollars(budgetedMu + activityMu), // positive = under budget
         projectedMonthEndDollars: projectedSpentDollars,
-        historicalAvgDollars: hist?.avgSpentDollars ?? null,
-        historicalMonths: hist?.monthsUsed ?? 0,
+        historicalAvgDollarsActive: hist?.avgSpentDollarsActive ?? null,
+        historicalAvgDollarsAll: hist?.avgSpentDollarsAll ?? null,
+        historicalMonthsActive: hist?.monthsUsedActive ?? 0,
+        historicalMonthsAvailable: hist?.monthsAvailable ?? 0,
       }
     })
-    .filter((c) => c.budgetedDollars > 0 || c.spentDollars > 0) // only categories with activity
-    .sort((a, b) => (a.remainingDollars - b.remainingDollars)) // overspent first
-    .slice(0, 20)
+    .filter((c) => c.budgetedDollars > 0 || c.spentDollars > 0)
+    .sort((a, b) => a.remainingDollars - b.remainingDollars)
+
+  const { atRisk: expenseCategoriesAtRisk, onTrack: expenseCategoriesOnTrack } = splitExpenseCategories(expenseCategoriesAll)
 
   // Income sources with actual received amounts (categorized)
   const incomeCategories = categoryRows
@@ -223,8 +271,12 @@ export async function buildMonthlyContext(userId: string, month: string) {
     .sort((a, b) => b.totalDollars - a.totalDollars)
     .slice(0, 10)
 
+  const todayIso = today.toISOString().substring(0, 10) // YYYY-MM-DD
+
   return {
     month,
+    today: todayIso,
+    isCurrentMonth,
     note: 'All dollar amounts are in USD. Do not re-scale them.',
     totals: {
       inflowsDollars: toDollars(inflowsMu),
@@ -235,7 +287,8 @@ export async function buildMonthlyContext(userId: string, month: string) {
     },
     incomeCategories,
     uncategorizedInflows,
-    expenseCategories,
+    expenseCategoriesAtRisk,
+    expenseCategoriesOnTrack,
     debtAccounts,
     liquidAccounts: userAccounts
       .filter((a) => ['checking', 'savings', 'cash'].includes(a.type))
@@ -249,4 +302,50 @@ export async function buildMonthlyContext(userId: string, month: string) {
     transactionCount: txns.length,
     generatedAt: new Date().toISOString(),
   }
+}
+
+type ExpenseCategoryCompact = {
+  name: string
+  groupName: string
+  budgetedDollars: number
+  spentDollars: number
+  remainingDollars: number
+}
+
+/**
+ * Split expense categories into "at risk" (already overspent OR projected to
+ * exceed budget at current pace), kept in full detail, and a compact on-track
+ * tier the model can still cite. Decided per row in one pass (no name lookup),
+ * so same-named categories in different groups never drop each other.
+ */
+export function splitExpenseCategories<T extends ExpenseCategoryCompact & { projectedMonthEndDollars: number }>(
+  categories: T[],
+): { atRisk: T[]; onTrack: ExpenseCategoryCompact[] } {
+  const atRisk: T[] = []
+  const onTrack: ExpenseCategoryCompact[] = []
+  for (const c of categories) {
+    if (c.remainingDollars < 0 || c.projectedMonthEndDollars > c.budgetedDollars) {
+      atRisk.push(c)
+    } else {
+      onTrack.push({
+        name: c.name,
+        groupName: c.groupName,
+        budgetedDollars: c.budgetedDollars,
+        spentDollars: c.spentDollars,
+        remainingDollars: c.remainingDollars,
+      })
+    }
+  }
+  return { atRisk, onTrack }
+}
+
+/**
+ * The chat route sends this JSON as an Anthropic `cache_control` block, so it
+ * must be byte-identical across turns while the data is unchanged: the
+ * per-call `generatedAt` stamp is left out (callers keep it in message
+ * metadata) and `hash` covers exactly the bytes sent.
+ */
+export function chatContextPayload<T extends { generatedAt: string }>(context: T): { json: string; hash: string } {
+  const json = JSON.stringify({ ...context, generatedAt: undefined })
+  return { json, hash: createHash('sha1').update(json).digest('hex').slice(0, 12) }
 }
