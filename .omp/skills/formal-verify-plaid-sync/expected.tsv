@@ -1,0 +1,19 @@
+# scenario	rule	expected	note
+# expected is what the code at the sync commit gives: pass, or violated for a known finding.
+Serial	NoMissing	pass
+Serial	NoGhost	pass
+Serial	NoStale	pass
+Crash	NoMissing	pass
+Crash	NoGhost	pass
+Crash	NoStale	violated	F5 a retried sync keeps the old amount
+Crash	NoRejectedInsert	pass
+Overlap	NoMissing	pass
+Overlap	NoGhost	violated	F3 overlapping syncs bring back a removed transaction
+Overlap	NoStale	violated	F4 overlapping syncs keep an old amount
+Overlap	NoRejectedInsert	pass
+Repair	NoMissing	violated	F1 Repair re-syncs from the cursor it read before the reset
+Repair	NoGhost	pass
+Repair	NoStale	pass
+Clear	NoMissing	violated	F2 Clear leaves the cursor in place
+Clear	NoGhost	pass
+Clear	NoStale	pass
