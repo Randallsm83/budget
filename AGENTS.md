@@ -199,3 +199,35 @@ Valid account types: `checking`, `savings`, `credit_card`, `cash`, `loan`, `real
 **Tracking** (`investment`, `real_estate`, `vehicle`, `loan`, `other`) — off-budget accounts used only for net worth in the sidebar. Their transactions are intentionally excluded from the budget page calculation (`src/app/(app)/budget/[month]/page.tsx` filters to `ON_BUDGET_TYPES` before querying transactions). Starting balances for large tracking accounts (e.g. a $200k house) would otherwise inflate RTA incorrectly.
 
 Liabilities (`credit_card`, `loan`) are grouped separately in the sidebar. Balances for liabilities are negative.
+
+## Agent skills
+
+### Issue tracker
+
+GitHub Issues on `Randallsm83/budget`, via `gh`. See `docs/agents/issue-tracker.md`.
+
+### Triage labels
+
+Default five-role vocabulary (`needs-triage`, `needs-info`, `ready-for-agent`, `ready-for-human`, `wontfix`). See `docs/agents/triage-labels.md`.
+
+### Domain docs
+
+Single-context: root `CONTEXT.md` + `docs/adr/`. See `docs/agents/domain.md`.
+
+<!-- caveman-begin -->
+Respond terse like smart caveman. All technical substance stay. Only fluff die.
+
+Rules:
+- Drop: articles (a/an/the), filler (just/really/basically), pleasantries, hedging
+- Fragments OK. Short synonyms. Technical terms exact. Code unchanged.
+- Pattern: [thing] [action] [reason]. [next step].
+- Not: "Sure! I'd be happy to help you with that."
+- Yes: "Bug in auth middleware. Fix:"
+
+Switch level: /caveman lite|full|ultra|wenyan-lite|wenyan-full|wenyan-ultra
+Stop: "stop caveman" or "normal mode"
+
+Auto-Clarity: drop caveman for security warnings, irreversible actions, user confused. Resume after.
+
+Boundaries: code/commits/PRs written normal.
+<!-- caveman-end -->
